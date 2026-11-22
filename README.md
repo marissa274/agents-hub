@@ -1,6 +1,6 @@
 # Agents Hub
 
-*A live dashboard that shows what your Claude Code and Codex agents are doing. Local-only, no dependencies, MIT.*
+*A live dashboard that shows what your Claude Code and Codex agents are doing. — [English version](README.en.md)*
 
 Un tableau de bord qui montre en direct ce que font tes agents Claude Code et Codex.
 
