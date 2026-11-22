@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Serveur du tableau de bord : http://127.0.0.1:7777 (port : AGENTS_HUB_PORT). Écoute en local seulement."""
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    tomllib = None
 import glob, http.server, json, os, subprocess, sys, threading, time, urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, EV, SC, CLAUDE, PORT, short
+from common import ROOT, EV, SC, CLAUDE, CODEX, PORT, short
 from adapters import ADAPTERS
 
 PROJ = os.path.realpath(os.path.join(CLAUDE, "projects"))
@@ -56,12 +60,23 @@ def read_desc(path):
             desc = l.split(":" if l.startswith("description:") else "=", 1)[1].strip().strip('"')
     return name, desc
 
+def read_toml_agent(path):
+    """(name, description) d'un agent Codex .toml : tomllib si disponible, sinon analyse ligne à ligne."""
+    if tomllib:
+        try:
+            with open(path, "rb") as f: d = tomllib.load(f)
+            n, desc = d.get("name"), d.get("description")
+            base = os.path.splitext(os.path.basename(path))[0]
+            return (n if isinstance(n, str) and n else base), (desc if isinstance(desc, str) else "")
+        except Exception: pass
+    return read_desc(path)
+
 def under(path, root):
     """path (déjà passé par realpath) est-il dans root ?"""
     try: return os.path.commonpath([path, root]) == root and path != root
     except ValueError: return False
 
-CWDS = set(); TRANSCRIPTS = {}; cwd_off = 0; CWD_LOCK = threading.Lock()
+CWDS = set(); HOOKED = set(); TRANSCRIPTS = {}; cwd_off = 0; CWD_LOCK = threading.Lock()
 def main_transcript(path):
     """Transcription principale d'une session ; celle d'un sous-agent (.../<session>/subagents/agent-x.jsonl) y est ramenée."""
     if os.sep + "subagents" + os.sep in path:
@@ -74,7 +89,7 @@ def known_cwds():
     with CWD_LOCK:
         try:
             size = os.path.getsize(EV)
-            if size < cwd_off: cwd_off = 0; CWDS.clear(); TRANSCRIPTS.clear()  # journal tourné ou vidé
+            if size < cwd_off: cwd_off = 0; CWDS.clear(); TRANSCRIPTS.clear()  # (HOOKED est conservé) journal tourné ou vidé
             if size > cwd_off:
                 with open(EV, "rb") as f:
                     f.seek(cwd_off); data = f.read()
@@ -85,6 +100,8 @@ def known_cwds():
                     except Exception: continue
                     if not isinstance(e, dict): continue
                     if isinstance(c, str) and c.startswith("/"): CWDS.add(c)
+                    if e.get("via") == "hook" and isinstance(e.get("source"), str) and isinstance(e.get("session"), str) and e["session"]:
+                        HOOKED.add((e["source"], e["session"]))  # session « sous hooks » : définitif
                     t, sid = e.get("transcript"), e.get("session")
                     if isinstance(t, str) and t.endswith(".jsonl") and isinstance(sid, str) and sid and e.get("source") != "codex":
                         TRANSCRIPTS[sid] = main_transcript(t)
@@ -96,10 +113,10 @@ def list_agents():
     out, seen = [], set()
     def add(pattern, scope, prefix=""):
         for f in sorted(glob.glob(pattern)):
-            n, d = read_desc(f); key = prefix + n
+            n, d = (read_toml_agent if f.endswith(".toml") else read_desc)(f); key = prefix + n
             if key not in seen: seen.add(key); out.append({"name": key, "description": d, "scope": scope})
     add(os.path.join(CLAUDE, "agents", "*.md"), "global")
-    add(os.path.expanduser("~/.codex/agents/*.toml"), "global", "codex · ")
+    add(os.path.join(glob.escape(CODEX), "agents", "*.toml"), "global", "codex · ")
     cwds = known_cwds(); cwds.add(os.getcwd())
     for c in cwds:
         root = c
@@ -153,6 +170,17 @@ def session_title(sid):
         return short(custom or ai, 200) if (custom or ai) else ""
     except Exception: return ""
 
+def any_title(sid):
+    t = session_title(sid)
+    if t: return t
+    for a in ADAPTERS:
+        fn = getattr(a, "title", None)
+        if fn:
+            try: t = fn(sid)
+            except Exception: t = ""
+            if t: return short(t, 200)
+    return ""
+
 def n_windows():
     with WLOCK: return len(WINDOWS)
 
@@ -175,9 +203,13 @@ EVLOCK = threading.Lock()
 def emit(events):
     """Appelé par les adaptateurs : écrit dans le flux et ouvre une fenêtre pour chaque tâche qui n'en a pas."""
     if not events: return
+    known_cwds()  # met HOOKED à jour : une session dont les hooks écrivent déjà n'a pas besoin de l'adaptateur
+    events = [e for e in events if not (isinstance(e, dict) and e.get("via") != "hook" and (e.get("source"), e.get("session")) in HOOKED)]
+    if not events: return
     blob = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events).encode()
     with EVLOCK, open(EV, "ab") as f:
         f.write(blob)  # un seul write par lot
+    if os.environ.get("AGENTS_HUB_NO_WINDOW"): return  # tests : jamais de fenêtre
     shown = views()
     for sid in dict.fromkeys(e.get("session") for e in events if isinstance(e, dict)):
         if not isinstance(sid, str) or not sid or not sid.isalnum() or shown.get(sid): continue
@@ -197,6 +229,10 @@ def resolve_transcript(q):
     if aid and aid.isalnum():
         hits = glob.glob(f"{PROJ}/*/*/subagents/agent-{aid}.jsonl")
         path = hits[0] if hits else ""
+    elif source and q.get("thread"):
+        adapter = next((a for a in ADAPTERS if a.NAME == source), None)
+        find = getattr(adapter, "find_thread", None)
+        path = find(q["thread"][0]) if find else ""
     elif q.get("path"):
         path = q["path"][0]
     elif source and sid.isalnum():
@@ -266,7 +302,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.send(json.dumps({"items": resolve_transcript(q)}))
         if u.path == "/api/titles":
             sids = [x for x in q.get("s", [""])[0].split(",") if x.isalnum()][:60]
-            return self.send(json.dumps({x: t for x in sids if (t := session_title(x))}))
+            return self.send(json.dumps({x: t for x in sids if (t := any_title(x))}))
         if u.path == "/api/scores":
             try:
                 with open(SC) as f: return self.send(f.read())

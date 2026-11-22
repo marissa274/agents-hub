@@ -23,19 +23,37 @@ Format d'un événement (un objet JSON par ligne dans events.jsonl) :
   cwd         dossier de travail
   transcript  chemin de la transcription
   source      NAME
+  via         "hook" si l'événement vient d'un hook (bin/log_event.py), absent pour un adaptateur
+
+Fonctions facultatives :
+  title(sid)           -> titre de la tâche ("" si inconnu), utilisé par /api/titles quand Claude Code n'en fournit pas
+  find_thread(tid)     -> chemin de la transcription d'un fil précis (orchestrateur ou sous-agent)
+
+Anti-doublon : quand les hooks Codex sont installés, ils écrivent les événements d'une session. Le serveur écarte alors
+ceux de l'adaptateur pour cette session ; l'adaptateur retarde les siens de DELAY secondes pour laisser le hook passer
+en premier. Sans hook reçu, l'adaptateur reste un repli complet.
 """
-import glob, json, os, time, threading
-from common import short
+import glob, json, os, re, time, threading
+from common import short, CODEX
 
 NAME = "codex"
-ROOT_DIR = os.path.realpath(os.path.expanduser("~/.codex/sessions"))
+ROOT_DIR = os.path.realpath(os.path.join(CODEX, "sessions"))
 SESS = ROOT_DIR
+INDEX = os.path.join(CODEX, "session_index.jsonl")
+STOP = threading.Event()  # pour arrêter loop() dans les tests
+DELAY = 2  # secondes avant d'émettre un événement de l'adaptateur (le hook passe d'abord)
+TID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 
 def tool_detail(p):
     raw = p.get("arguments") or p.get("input") or ""
     try: a = json.loads(raw) if isinstance(raw, str) else raw
     except Exception: a = raw
     if isinstance(a, dict):
+        if p.get("name") == "spawn_agent":
+            who = a.get("agent_type") or a.get("role") or a.get("task_name") or ""
+            what = a.get("message") or a.get("items") or ""
+            what = what if isinstance(what, str) else short(what)
+            return short(f"{who}: {what}" if isinstance(who, str) and who else what)
         for k in ("agent_type", "role", "message", "description", "cmd", "command", "path", "query", "items"):
             if a.get(k): return short(a[k])
     return short(a)
@@ -53,7 +71,8 @@ class File:
         if meta:
             self.ready = True
             self.thread, self.cwd = meta.get("id", ""), meta.get("cwd", "")
-            self.session = (meta.get("parent_thread_id") or self.thread)[:8]  # sous-agents rangés avec leur session parente
+            # sous-agents rangés avec la tâche racine (session_id), à défaut avec leur parent
+            self.session = str(meta.get("session_id") or meta.get("parent_thread_id") or meta.get("id") or "")[:8]
             src = meta.get("source")
             spawn = src.get("subagent", {}).get("thread_spawn") if isinstance(src, dict) else None
             if isinstance(src, dict) and "subagent" in src and not spawn:
@@ -119,7 +138,8 @@ def loop(emit):
     # état au démarrage : pour les fichiers déjà là, on suit seulement la suite
     known = {p: size(p) for p in all_files()}
     files = {}
-    while True:
+    queue = []  # (heure d'émission, événement)
+    while not STOP.is_set():
         try:
             new_events = []
             for path in all_files():
@@ -130,7 +150,12 @@ def loop(emit):
                     files[path] = File(path, known[path])  # session reprise : la suite
             for f in files.values():
                 new_events += f.read()
-            if new_events: emit(new_events)
+            now = time.time()
+            queue += [(now + DELAY, e) for e in new_events]
+            due = [e for t, e in queue if t <= now]
+            if due:
+                queue = [(t, e) for t, e in queue if t > now]
+                emit(due)
         except Exception:
             pass
         time.sleep(1)
@@ -149,6 +174,53 @@ def find_session(sid):
         if meta.get("parent_thread_id") or not str(meta.get("id", "")).startswith(sid): continue
         if not best or os.path.getmtime(f) > os.path.getmtime(best): best = f
     return best
+
+def find_thread(tid):
+    """Transcription d'un fil Codex (orchestrateur ou sous-agent) d'après son identifiant ; "" si invalide ou inconnu."""
+    if not isinstance(tid, str) or not TID_RE.match(tid): return ""
+    best = ""
+    for f in glob.glob(f"{glob.escape(SESS)}/*/*/*/*-{tid}.jsonl"):
+        if not best or os.path.getmtime(f) > os.path.getmtime(best): best = f
+    return best
+
+def root_session(tid):
+    """Identifiant de la tâche racine d'un fil (session_id du rollout, sinon parent_thread_id, sinon tid)."""
+    path = find_thread(tid)
+    if path:
+        try:
+            with open(path) as fh: meta = json.loads(fh.readline()).get("payload") or {}
+            return str(meta.get("session_id") or meta.get("parent_thread_id") or tid)
+        except Exception: pass
+    return tid
+
+_TITLES = {"sig": None, "off": 0, "map": {}}
+
+def title(sid):
+    """Titre d'une tâche d'après session_index.jsonl (la dernière ligne gagne). Jamais d'exception."""
+    try:
+        st = os.stat(INDEX); sig = (st.st_mtime_ns, st.st_size)
+        c = _TITLES
+        if c["sig"] != sig:
+            if st.st_size < c["off"] or c["sig"] is None: c["off"], c["map"] = 0, {}
+            start = c["off"]
+            if st.st_size - start > 4_000_000: start = st.st_size - 4_000_000
+            with open(INDEX, "rb") as f:
+                f.seek(start); data = f.read(st.st_size - start)
+            end = data.rfind(b"\n") + 1  # ligne incomplète : au prochain tour
+            lines = data[:end].split(b"\n")
+            if start and start != c["off"]: lines = lines[1:]
+            for l in lines:
+                try: d = json.loads(l)
+                except Exception: continue
+                if not isinstance(d, dict): continue
+                i, n = d.get("id"), d.get("thread_name")
+                if not isinstance(i, str) or not isinstance(n, str) or not n.strip() or n.strip().startswith("Guardian review"): continue
+                c["map"].pop(i[:8], None); c["map"][i[:8]] = n.strip()
+                if len(c["map"]) > 5000: c["map"].pop(next(iter(c["map"])))
+            c["off"], c["sig"] = start + end, sig
+        return short(c["map"].get(sid[:8], ""), 200) if isinstance(sid, str) and sid else ""
+    except Exception:
+        return ""
 
 def transcript(path, short_fn=short):
     """Transcription lisible d'une session Codex."""

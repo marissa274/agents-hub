@@ -21,8 +21,10 @@ class ServerTest(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="hub-server-")
         cls.home = os.path.join(cls.tmp, "home"); os.makedirs(cls.home)
         cls.port = free_port()
-        env = {**os.environ, "HOME": cls.home, "AGENTS_HUB_DATA": os.path.join(cls.tmp, "data"), "AGENTS_HUB_PORT": str(cls.port)}
-        env.pop("CLAUDE_CONFIG_DIR", None)
+        env = {**os.environ, "HOME": cls.home, "AGENTS_HUB_DATA": os.path.join(cls.tmp, "data"), "AGENTS_HUB_PORT": str(cls.port),
+               "PATH": "/usr/bin:/bin", "AGENTS_HUB_NO_WINDOW": "1"}
+        for k in ("CODEX_HOME", "CODEX_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "AGENTS_HUB_SESSION", "CLAUDE_CONFIG_DIR"): env.pop(k, None)
+        cls.data = os.path.join(cls.tmp, "data"); cls.codex = os.path.join(cls.home, ".codex")
         cls.errfile = os.path.join(cls.tmp, "stderr.txt")
         cls.err = open(cls.errfile, "w")
         cls.proc = subprocess.Popen([sys.executable, os.path.join(REPO, "bin", "server.py")], env=env,
@@ -81,6 +83,61 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(items("codex_session=zzz"), [])
         got = items("path=" + os.path.join(proj, "ok.jsonl"))
         self.assertEqual([i["t"] for i in got], ["bonjour"])
+
+
+    # ---------- Codex ----------
+    def rollout(self, name, tid, **meta):
+        d = os.path.join(self.codex, "sessions", "2026", "01", "01"); os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, f"rollout-2026-01-01T00-00-00-{tid}.jsonl")
+        lines = [{"type": "session_meta", "payload": {"id": tid, "cwd": "/w", **meta}},
+                 {"type": "response_item", "payload": {"type": "function_call", "name": "shell", "arguments": json.dumps({"cmd": name})}},
+                 {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "réponse " + name}]}}]
+        write(p, "".join(json.dumps(l) + "\n" for l in lines))
+        return p
+
+    def events(self):
+        p = os.path.join(self.data, "events.jsonl")
+        return [json.loads(l) for l in read(p).splitlines()] if os.path.exists(p) else []
+
+    def test_hooked_session_not_duplicated_by_adapter(self):
+        time.sleep(1.2)  # l'adaptateur a pris son état initial
+        hooked, free = "aaaa0001-0000-0000-0000-000000000000", "bbbb0002-0000-0000-0000-000000000000"
+        with open(os.path.join(self.data, "events.jsonl"), "a") as f:
+            f.write(json.dumps({"ts": time.time(), "event": "PreToolUse", "session": hooked[:8], "agent": "codex", "tool": "Bash",
+                                "source": "codex", "via": "hook", "cwd": "/w"}) + "\n")
+        self.rollout("hooked-cmd", hooked); self.rollout("free-cmd", free)
+        for _ in range(60):
+            if any(e.get("session") == free[:8] for e in self.events()): break
+            time.sleep(0.2)
+        ev = self.events()
+        self.assertTrue([e for e in ev if e.get("session") == free[:8] and e.get("via") != "hook"], "repli adaptateur : session sans hook émise")
+        self.assertEqual([e for e in ev if e.get("session") == hooked[:8] and e.get("via") != "hook"], [], "doublon de la session sous hooks")
+        self.assertEqual(len([e for e in ev if e.get("session") == hooked[:8]]), 1)
+
+    def test_titles_from_codex_session_index(self):
+        os.makedirs(self.codex, exist_ok=True)
+        write(os.path.join(self.codex, "session_index.jsonl"),
+              json.dumps({"id": "cccc0003-1", "thread_name": "Premier"}) + "\n" + json.dumps({"id": "cccc0003-1", "thread_name": "Titre Codex"}) + "\n"
+              + json.dumps({"id": "dddd0004-1", "thread_name": "Guardian review x"}) + "\n")
+        self.assertEqual(self.title("cccc0003"), "Titre Codex")
+        self.assertIsNone(self.title("dddd0004"))
+
+    def test_transcript_by_thread_and_attacks(self):
+        tid = "eeee0005-0000-0000-0000-000000000000"
+        self.rollout("thread-cmd", tid)
+        def items(qs):
+            r, b = self.get("/api/transcript?" + qs); self.assertEqual(r.status, 200); return json.loads(b)["items"]
+        got = items("source=codex&thread=" + tid)
+        self.assertTrue(any("thread-cmd" in i["t"] for i in got), got)
+        outside = os.path.join(self.tmp, "dehors-eeee.jsonl"); write(outside, "".join(
+            json.dumps({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"text": "secret"}]}}) + "\n" for _ in range(1)))
+        tid2 = "ffff0006-0000-0000-0000-000000000000"
+        d = os.path.join(self.codex, "sessions", "2026", "01", "01")
+        os.symlink(outside, os.path.join(d, f"rollout-x-{tid2}.jsonl"))
+        for bad in ("../../etc/passwd", "..%2F..%2Fx", "*", "%2A", "eeee0005", tid + "%2F..", "", tid2, "zzzzzzzz-zzzz"):
+            self.assertEqual(items("source=codex&thread=" + bad), [], bad)
+        self.assertEqual(items("source=inconnu&thread=" + tid), [])
+        self.assertEqual(items("thread=" + tid), [])
 
     def test_since_not_a_number(self):
         r, b = self.get("/api/events?since=abc")
@@ -211,6 +268,11 @@ class ServerTest(unittest.TestCase):
             if depth == 0 and line.startswith("function syncAlive"): top = True
             depth += line.count("{") - line.count("}")
         self.assertTrue(top, "syncAlive n'est pas global")
+
+    def test_ui_first_prompt_filter_and_spawn_ghost_cards(self):
+        html = read(os.path.join(REPO, "ui", "index.html"))
+        self.assertIn("e.event===\"UserPromptSubmit\"&&e.detail&&!s.prompt&&!e.agent_id", html)  # pas de filtre sur e.agent
+        self.assertIn("e.tool!==\"spawn_agent\"||(e.detail.includes(\":\")", html)  # spawn_agent sans nom : pas de carte
 
     def test_ui_escapes_and_whitelists_severity(self):
         html = read(os.path.join(REPO, "ui", "index.html"))

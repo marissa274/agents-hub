@@ -291,7 +291,7 @@ function sessions(){
     s.first=Math.min(s.first,e.ts); s.last=Math.max(s.last,e.ts); s.n++;
     if(e.cwd&&!s.cwd) s.cwd=e.cwd;
     if(e.source==="codex") s.codex=true;
-    if(e.event==="UserPromptSubmit"&&e.detail&&!s.prompt) s.prompt=e.detail;
+    if(e.event==="UserPromptSubmit"&&e.detail&&!s.prompt&&!e.agent_id) s.prompt=e.detail;
   }
   return Object.values(m).sort((a,b)=>b.last-a.last);
 }
@@ -313,7 +313,7 @@ function derive(sid){
       if(e.agent_id) addRun(a,e); else if(e.transcript) a.transcript=e.transcript;
       a.tools++; a.toolsUsed[e.tool]=(a.toolsUsed[e.tool]||0)+1;
       if(e.tool==="Skill"&&e.detail) a.skills[e.detail]=(a.skills[e.detail]||0)+1;
-      if(e.tool==="Agent"||e.tool==="Task"){const sub=e.detail.split(":")[0]; if(sub&&agents[sub]?.status!=="active"){const s=get(sub); s.status="active"; s.now="Lancé par l'orchestrateur";}}
+      if(e.tool==="Agent"||e.tool==="Task"||e.tool==="spawn_agent"){const nm=e.detail.split(":")[0].trim(), ok=e.tool!=="spawn_agent"||(e.detail.includes(":")&&/^[\w.-]+$/.test(nm)); const sub=ok&&nm?(e.tool==="spawn_agent"?"codex · ":"")+nm:""; if(sub&&agents[sub]?.status!=="active"){const s=get(sub); s.status="active"; s.now="Lancé par l'orchestrateur";}}
       a.now=verb(e);
     }
     else if(e.event==="UserPromptSubmit"){const a=get(n);if(e.transcript)a.transcript=e.transcript;a.status="active";a.now="Nouvelle demande";}
@@ -322,7 +322,12 @@ function derive(sid){
   get(orch);
   return {ev,agents,orch};
 }
-function addRun(a,e){ if(e.agent_id&&!a.runs.find(r=>r.id===e.agent_id)) a.runs.push({id:e.agent_id,ts:e.ts,path:(e.transcript||"").includes("/.codex/")?e.transcript:""}); }
+function addRun(a,e){
+  if(!e.agent_id) return;
+  const cx=e.source==="codex", r=a.runs.find(r=>r.id===e.agent_id);
+  if(!r) a.runs.push({id:e.agent_id,ts:e.ts,codex:cx,path:cx?(e.transcript||""):""});
+  else if(cx&&!r.path&&e.transcript) r.path=e.transcript;  // le chemin arrive parfois avec un événement suivant
+}
 
 /* ---------- textes du flux ---------- */
 function verb(e){
@@ -330,6 +335,7 @@ function verb(e){
   switch(e.tool){
     case "Read": return "Lit "+base(d);
     case "Edit": return "Modifie "+base(d);
+    case "apply_patch": return "Modifie "+(d||"des fichiers");
     case "Write": return "Écrit "+base(d);
     case "Bash": return "Exécute : "+d;
     case "Grep": case "Glob": return "Cherche « "+d+" »";
@@ -353,16 +359,16 @@ function shortQuestion(t){
   return q.length>140?q.slice(0,137)+"…":q;
 }
 function attention(e){
-  const codex=(e.agent||"")==="codex", app=codex?"Codex":"Claude";
+  const codex=e.source==="codex", app=codex?"Codex":"Claude";
   if(e.event==="Stop"){
     return isQuestion(e.detail)?{type:"question",title:"L'orchestrateur te pose une question",msg:shortQuestion(e.detail)}
                                 :{type:"done",title:"L'orchestrateur a fini",msg:"Retourne dans "+app+" pour voir sa réponse."};
   }
   if(e.event==="PreToolUse"&&e.tool==="AskUserQuestion") return {type:"question",title:"L'orchestrateur te pose une question",msg:shortQuestion(e.detail+"?")||"Réponds-lui dans "+app+"."};
   if(e.event==="Notification"){
-    if(e.kind==="permission_prompt"||/permission/i.test(e.detail)) return {type:"permission",title:"Claude attend ta permission",msg:"Va dans Claude pour accepter ou refuser."};
-    if(e.kind==="idle_prompt"||/waiting for your input/i.test(e.detail)) return {type:"question",title:"Claude attend ta réponse",msg:""};
-    return {type:"permission",title:"Claude a besoin de toi",msg:""};
+    if(e.kind==="permission_prompt"||/permission/i.test(e.detail)) return {type:"permission",title:app+" attend ta permission",msg:"Va dans "+app+" pour accepter ou refuser."};
+    if(e.kind==="idle_prompt"||/waiting for your input/i.test(e.detail)) return {type:"question",title:app+" attend ta réponse",msg:""};
+    return {type:"permission",title:app+" a besoin de toi",msg:""};
   }
   return null;
 }
@@ -590,7 +596,7 @@ async function loadTranscript(scrollEnd){
   const stw=a.status==="active"?"En train de travailler":a.status==="done"?"Terminé":"";
   $("dstatus").textContent=[stw,a.now].filter((x,i,arr)=>x&&arr.indexOf(x)===i).join(" · ");
   const run=a.runs.find(r=>r.id===openRun);
-  let url=run?(run.path?"/api/transcript?path="+encodeURIComponent(run.path):"/api/transcript?agent_id="+encodeURIComponent(run.id)):(a.transcript?"/api/transcript?path="+encodeURIComponent(a.transcript):"");
+  let url=run?(run.path?"/api/transcript?path="+encodeURIComponent(run.path):run.codex?"/api/transcript?source=codex&thread="+encodeURIComponent(run.id):"/api/transcript?agent_id="+encodeURIComponent(run.id)):(a.transcript?"/api/transcript?path="+encodeURIComponent(a.transcript):"");
   if(!url&&openName==="codex") url="/api/transcript?source=codex&session="+encodeURIComponent(s.id);
   if(!url){$("dbody").innerHTML='<div class="empty">Le détail apparaîtra dès la première action.</div>';return;}
   let items=[]; try{items=(await (await fetch(url)).json()).items;}catch(e){}
@@ -626,7 +632,7 @@ async function poll(){
     const sc=await (await fetch("/api/scores")).text();
     let tchg=false;
     try{
-      const ids=sessions().filter(x=>!x.codex&&Date.now()/1000-x.last<86400).slice(0,60).map(x=>x.id).join(",");
+      const ids=sessions().filter(x=>Date.now()/1000-x.last<86400).slice(0,60).map(x=>x.id).join(",");
       if(ids){ const tt=await (await fetch("/api/titles?s="+encodeURIComponent(ids))).text(); if(tt!==lastTitles){ lastTitles=tt; titles=JSON.parse(tt)||{}; tchg=true; } }
     }catch(e){}
     const changed=r.events.length||tchg||sc!==lastScores||!booted||++tick%15===0;

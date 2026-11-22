@@ -1,22 +1,22 @@
 ---
 name: hub
-description: Ouvre la fenêtre Agents Hub (tableau de bord rose des agents en temps réel) et fait travailler une équipe d'agents : ceux du projet, ceux de la personne, ou les agents de base. À utiliser quand on dit « hub », « ouvre mon agent hub », « utilise mes agents / mes sous-agents / les agents de mon projet / mon équipe », ou qu'on demande les cycles du reviewer.
+description: Ouvre la fenêtre Agents Hub (tableau de bord des agents en temps réel) et fait travailler une équipe d'agents : ceux du projet, ceux de la personne, ou les agents de base. À utiliser quand on dit « hub », « ouvre mon agent hub », « utilise mes agents / mes sous-agents / les agents de mon projet / mon équipe », ou qu'on demande les cycles du reviewer.
 ---
 1. Ouvre la fenêtre : `sh "__AGENTS_HUB__/bin/hub" --auto` (ne l'ouvre pas en double si elle est déjà ouverte).
 
 2. Sans tâche : ouvre seulement la fenêtre et dis que c'est fait.
 
 3. Avec une tâche, tu es l'orchestrateur. Choisis l'équipe selon ce que la personne demande :
-   - Fais l'inventaire avant de déléguer :
-     - agents du projet : `.claude/agents/*.md` à la racine du dépôt (`git rev-parse --show-toplevel`) ;
-     - agents personnels : `~/.claude/agents/*.md` ;
-     - lis le `name` et la `description` de chacun (frontmatter).
+   - Fais l'inventaire avant de déléguer (à la racine du dépôt : `git rev-parse --show-toplevel`) :
+     - dans Claude Code : agents du projet `.claude/agents/*.md`, agents personnels `~/.claude/agents/*.md` ; lis le `name` et la `description` de chacun (frontmatter) ;
+     - dans Codex : agents du projet `.codex/agents/*.toml`, agents personnels `agents/*.toml` dans le dossier de configuration de Codex (`$CODEX_HOME`, sinon `~/.codex`) ; lis les clés `name` et `description` de chacun.
    - « les agents de mon projet » → n'utilise QUE les agents du projet. S'il n'y en a pas, dis-le et propose les autres.
    - « mes agents / mes sous-agents » → agents du projet puis agents personnels, tous confondus.
    - Rien de précisé → agents du projet et personnels d'abord. Les 6 agents de base (product-manager, architecte, ux-designer, developpeur, redacteur-doc, reviewer) servent quand aucun agent de la personne ne convient à la sous-tâche.
    - Un agent qu'elle nomme explicitement passe toujours en premier.
-   - Délègue avec l'outil Agent (`subagent_type` = le `name` de l'agent). Si un nom n'est pas proposé par l'outil, c'est que Claude Code n'a pas encore été redémarré depuis sa création : dis-le et prends l'agent le plus proche.
+   - Délègue avec l'outil Agent de Claude Code (`subagent_type` = le `name` de l'agent), ou avec `spawn_agent` dans Codex (`agent_type` = le `name` de l'agent). Si un nom n'est pas proposé par l'outil, c'est que l'application n'a pas encore été redémarrée depuis sa création : dis-le et prends l'agent le plus proche.
    - Annonce l'équipe choisie en une ligne (qui fait quoi) avant de lancer.
+   - Dans Codex, si le sandbox bloque `score.py` ou `bin/hub` (écriture hors du projet), demande l'élévation des droits pour cette commande.
    - Tout s'affiche en direct dans la fenêtre (les agents du projet ont un badge avec le nom du projet).
 
 4. Revue de code = 3 cycles de reviewer (le reviewer du projet s'il y en a un, sinon `reviewer`) :

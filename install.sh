@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installe Agents Hub : agents, skill « hub » et hooks Claude Code.
+# Installe Agents Hub : agents, skill « hub » et hooks Claude Code (et Codex s'il est détecté).
 SELF="$0"
 while [ -h "$SELF" ]; do
   DIR=$(cd "$(dirname "$SELF")" && pwd)
