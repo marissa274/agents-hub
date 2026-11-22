@@ -1,0 +1,17 @@
+#!/bin/sh
+# Agents Hub : ouvre la fenêtre du tableau de bord (démarre le serveur au besoin).
+#   hub [--auto]     ouvre la fenêtre (elle suit la tâche active) sauf si une fenêtre non épinglée est déjà ouverte
+#   hub session ID   ouvre une fenêtre épinglée sur la tâche ID, sauf si une fenêtre l'affiche déjà
+#   hub --hook       (hook Claude Code) lit session_id sur l'entrée standard, puis ouvre comme « session ID »
+#                    (ou comme --auto si l'identifiant est absent)
+SELF="$0"
+while [ -h "$SELF" ]; do
+  DIR=$(cd "$(dirname "$SELF")" && pwd)
+  LINK=$(readlink "$SELF")
+  case "$LINK" in
+    /*) SELF="$LINK" ;;
+    *) SELF="$DIR/$LINK" ;;
+  esac
+done
+ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+exec python3 "$ROOT/bin/open_window.py" "$@"

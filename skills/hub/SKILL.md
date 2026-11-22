@@ -1,0 +1,27 @@
+---
+name: hub
+description: Ouvre la fenêtre Agents Hub (tableau de bord rose des agents en temps réel) et fait travailler une équipe d'agents : ceux du projet, ceux de la personne, ou les agents de base. À utiliser quand on dit « hub », « ouvre mon agent hub », « utilise mes agents / mes sous-agents / les agents de mon projet / mon équipe », ou qu'on demande les cycles du reviewer.
+---
+1. Ouvre la fenêtre : `sh "__AGENTS_HUB__/bin/hub" --auto` (ne l'ouvre pas en double si elle est déjà ouverte).
+
+2. Sans tâche : ouvre seulement la fenêtre et dis que c'est fait.
+
+3. Avec une tâche, tu es l'orchestrateur. Choisis l'équipe selon ce que la personne demande :
+   - Fais l'inventaire avant de déléguer :
+     - agents du projet : `.claude/agents/*.md` à la racine du dépôt (`git rev-parse --show-toplevel`) ;
+     - agents personnels : `~/.claude/agents/*.md` ;
+     - lis le `name` et la `description` de chacun (frontmatter).
+   - « les agents de mon projet » → n'utilise QUE les agents du projet. S'il n'y en a pas, dis-le et propose les autres.
+   - « mes agents / mes sous-agents » → agents du projet puis agents personnels, tous confondus.
+   - Rien de précisé → agents du projet et personnels d'abord. Les 6 agents de base (product-manager, architecte, ux-designer, developpeur, redacteur-doc, reviewer) servent quand aucun agent de la personne ne convient à la sous-tâche.
+   - Un agent qu'elle nomme explicitement passe toujours en premier.
+   - Délègue avec l'outil Agent (`subagent_type` = le `name` de l'agent). Si un nom n'est pas proposé par l'outil, c'est que Claude Code n'a pas encore été redémarré depuis sa création : dis-le et prends l'agent le plus proche.
+   - Annonce l'équipe choisie en une ligne (qui fait quoi) avant de lancer.
+   - Tout s'affiche en direct dans la fenêtre (les agents du projet ont un badge avec le nom du projet).
+
+4. Revue de code = 3 cycles de reviewer (le reviewer du projet s'il y en a un, sinon `reviewer`) :
+   - Avant le cycle 1 : `python3 "__AGENTS_HUB__/bin/score.py" reset`.
+   - Cycle 1 logique et sécurité ; cycle 2 vérification des correctifs et cas limites ; cycle 3 conventions, lisibilité, accessibilité.
+   - Si le reviewer utilisé ne note pas lui-même ses bugs, enregistre chaque bug de son rapport :
+     `python3 "__AGENTS_HUB__/bin/score.py" add --cycle N --severity critique|majeur|mineur|style --file F --line L --title ".." --scenario ".."`
+   - Après chaque cycle : vérifie chaque bug, puis `score.py confirm <id>` ou `score.py reject <id> --reason ".."` ; fais corriger les bugs confirmés (développeur du projet ou `developpeur`), puis `score.py fixed <id>` ; lance le cycle suivant.
