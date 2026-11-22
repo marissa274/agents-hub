@@ -77,4 +77,4 @@ Retire les hooks, les agents et le skill installés (un fichier que tu as modifi
 
 MIT, voir [LICENSE](LICENSE).
 
-Créé par Marissabelle Bindeki <!-- ajouter le lien LinkedIn ici -->
+Créé par [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)
