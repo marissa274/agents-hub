@@ -77,3 +77,41 @@ def codex_tool(name):
 def readable(text):
     """Texte lisible, ou "" si Codex l'a chiffré (mission d'un sous-agent : jeton « gAAAAA… »)."""
     return "" if isinstance(text, str) and _SEALED.match(text.strip()) else text
+
+
+def runtime(pid=None, hops=25):
+    """Programme qui a lancé cette commande : "codex", "claude" ou "" (inconnu).
+
+    On remonte les processus parents et le plus proche gagne : Codex lancé depuis un terminal de Claude
+    hérite de CLAUDE_CODE_SESSION_ID, mais c'est bien Codex qui exécute la commande."""
+    import subprocess
+    pid = pid or os.getppid()
+    for _ in range(hops):
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)], capture_output=True, text=True, timeout=2).stdout.strip()
+        except Exception:
+            return ""
+        if not out: return ""
+        ppid, _, comm = out.partition(" ")
+        name = os.path.basename(comm.strip()).lower()
+        if "codex" in name: return "codex"
+        if name == "claude": return "claude"
+        try: pid = int(ppid)
+        except ValueError: return ""
+        if pid <= 1: return ""
+    return ""
+
+
+def env_task():
+    """(clé de tâche, source, fil Codex) d'après l'environnement de la commande en cours.
+
+    AGENTS_HUB_SESSION passe toujours en premier ; sinon l'outil le plus proche (runtime) choisit entre
+    CLAUDE_CODE_SESSION_ID et CODEX_THREAD_ID ; s'il est inconnu, Claude puis Codex comme avant."""
+    hub = os.environ.get("AGENTS_HUB_SESSION")
+    if hub: return task_key(hub), "claude", ""
+    claude, thread = os.environ.get("CLAUDE_CODE_SESSION_ID") or "", os.environ.get("CODEX_THREAD_ID") or ""
+    order = ["codex", "claude"] if (thread and claude and runtime() == "codex") else ["claude", "codex"]
+    for who in order:
+        if who == "claude" and claude: return task_key(claude), "claude", ""
+        if who == "codex" and thread: return task_key(codex_root(thread), "codex"), "codex", thread
+    return "", "claude", ""

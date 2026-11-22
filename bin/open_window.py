@@ -20,7 +20,7 @@ try:
     import fcntl
 except ImportError:
     sys.exit("Agents Hub : Windows non supporté (fcntl indisponible).")
-from common import ROOT, LOCK, LAST, ERR, PORT, URL, codex_root, task_key
+from common import ROOT, LOCK, LAST, ERR, PORT, URL, codex_root, task_key, env_task
 
 GRACE = 20       # secondes : une fenêtre qui vient d'être ouverte met un moment à se signaler (par tâche)
 GLOBAL_GUARD = 3 # secondes : garde courte entre deux ouvertures, toutes tâches confondues
@@ -130,11 +130,8 @@ def load_last():
 
 
 def current_task():
-    """Tâche en cours d'après l'environnement : session Claude Code, sinon tâche racine du fil Codex, sinon "" (auto)."""
-    sid = task_key(os.environ.get("CLAUDE_CODE_SESSION_ID"))
-    if not sid and os.environ.get("CODEX_THREAD_ID"):
-        sid = task_key(codex_root(os.environ["CODEX_THREAD_ID"]), "codex")
-    return sid
+    """Tâche en cours d'après l'environnement (voir common.env_task), sinon "" (auto)."""
+    return env_task()[0]
 
 
 def main(argv):

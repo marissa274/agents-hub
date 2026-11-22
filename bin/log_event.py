@@ -39,6 +39,9 @@ def codex_event(d):
     event = d.get("hook_event_name")
     sid = d.get("session_id")
     if not isinstance(event, str) or not isinstance(sid, str) or not sid: return None
+    # Tâches internes de Codex (ex. suggestions générées en arrière-plan) : Codex ne garde aucune transcription
+    # (transcript_path absent) et elles tournent hors de tout projet (cwd « / »). Ce ne sont pas les tâches de la personne.
+    if not d.get("transcript_path") and d.get("cwd") == "/": return None
     aid = d.get("agent_id") if isinstance(d.get("agent_id"), str) else ""
     atype = d.get("agent_type") if isinstance(d.get("agent_type"), str) else ""
     sub = bool(aid)

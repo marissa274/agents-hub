@@ -7,16 +7,12 @@
 """
 import argparse, json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import SC as F, codex_root, task_key
+from common import SC as F, codex_root, task_key, env_task
 # chaque bug appartient au projet (racine git) d'où la commande est lancée : les projets ne se mélangent pas
 try: PROJ = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip() or os.getcwd()
 except Exception: PROJ = os.getcwd()
 # chaque bug appartient aussi à la tâche (session Claude Code ou Codex) qui l'a noté : la fenêtre d'une tâche ne montre que ses bugs
-RAW = os.environ.get("AGENTS_HUB_SESSION") or os.environ.get("CLAUDE_CODE_SESSION_ID") or ""
-THREAD, SRC = "", "claude"
-if not RAW and os.environ.get("CODEX_THREAD_ID"):
-    THREAD = os.environ["CODEX_THREAD_ID"]; RAW = codex_root(THREAD); SRC = "codex"
-SID = task_key(RAW, SRC)
+SID, SRC, THREAD = env_task()  # outil le plus proche (Claude ou Codex), même règle que bin/hub
 def ours(b): return b.get("session") == SID if SID else b.get("project") == PROJ
 PTS = {"critique": 10, "majeur": 5, "mineur": 2, "style": 1}
 def load():
