@@ -12,19 +12,42 @@ Je n'arrivais pas à voir mes agents travailler, alors j'ai créé Agents Hub : 
 
 ## Ce qu'il fait
 
-- Affiche tes agents en direct : qui travaille, avec quel outil, sur quoi.
-- Fonctionne avec Claude Code et Codex.
-- Une fenêtre par tâche (Claude Code ou Codex), jamais deux pour la même tâche ; `bin/hub` (ou `/hub`) ouvre la fenêtre de la tâche en cours.
-- La fenêtre s'ouvre seulement quand tu tapes `/hub` (Claude Code), `$hub` (Codex) ou demandes explicitement d'ouvrir le hub (le skill peut aussi orchestrer tes agents sans ouvrir de fenêtre) ; les hooks enregistrent l'activité en arrière-plan pour que tout soit là à l'ouverture.
-- Le titre de la tâche (« Projet · Titre ») s'affiche en haut de la page, repris de Claude Code ou, à défaut, du premier prompt.
-- Trois thèmes : Sombre (par défaut), Rose (rose sur fond noir) et Clair.
-- Un scoreboard pour le reviewer : bugs trouvés, confirmés ou rejetés, sur 3 cycles de revue.
+- Montre tes agents en direct : qui travaille, avec quel outil, sur quoi.
+- Marche avec **Claude Code** et **Codex**, de la même façon.
+- **Une fenêtre par tâche**, avec son titre en haut (« Projet · Titre »). Jamais deux fenêtres pour la même tâche.
+- La fenêtre s'ouvre **seulement quand tu le demandes** (voir Utilisation). Le reste du temps, l'activité est enregistrée en arrière-plan : tout est là quand tu ouvres.
+- Un scoreboard pour le reviewer : les bugs trouvés dans la tâche, sur 3 cycles de revue.
+- Trois thèmes : Sombre (par défaut), Rose et Clair.
 
-## L'équipe de départ
+## Installation
 
-Agents Hub est d'abord un hub qui montre **tous** tes agents : ceux du projet (`.claude/agents/`, avec un badge indiquant le nom du projet) et ceux de ton ordinateur (`~/.claude/agents/`).
+Prérequis : macOS ou Linux, Python 3.8+, Claude Code et/ou Codex. Chrome est facultatif (sinon ton navigateur habituel est utilisé).
 
-Il est aussi livré avec 6 agents de base, optionnels, qui servent quand tu n'as pas tes propres agents :
+```sh
+git clone https://github.com/marissa274/agents-hub
+cd agents-hub
+./install.sh
+```
+
+L'installation ne remplace rien de ce que tu as déjà et sauvegarde tes réglages avant de les modifier (dans `backups/`). Ensuite :
+
+- **Claude Code** : redémarre-le.
+- **Codex** (configuré automatiquement s'il est installé) : lance `codex`, tape `/hooks`, puis approuve les hooks d'Agents Hub. Codex ne les exécute qu'après ton accord.
+
+## Utilisation
+
+| | Claude Code | Codex |
+|---|---|---|
+| Ouvrir la fenêtre de la tâche en cours | `/hub` | `$hub` |
+| Ou simplement | « ouvre le hub » | « ouvre le hub » |
+
+Tu peux aussi lancer `bin/hub` dans un terminal. Dire « utilise mes agents » fait travailler l'équipe **sans** ouvrir de fenêtre.
+
+Dans Codex, la première fois, il te demande la permission de lancer le hub (il démarre un petit serveur et ouvre ton navigateur, ce qui sort de son bac à sable). Choisis « toujours autoriser » pour ne plus avoir à le refaire.
+
+## Les agents
+
+Agents Hub montre **tous** tes agents : ceux de ton projet et ceux de ton ordinateur. Il est aussi livré avec 6 agents de base, pour quand tu n'as pas les tiens :
 
 - `product-manager` : transforme un besoin en user stories.
 - `architecte` : prépare le plan technique avant le code.
@@ -33,16 +56,16 @@ Il est aussi livré avec 6 agents de base, optionnels, qui servent quand tu n'as
 - `redacteur-doc` : documentation et notes de version.
 - `reviewer` : chasse les bugs et marque des points.
 
-Ils sont installés pour Claude Code (`~/.claude/agents/*.md`) et pour Codex (`~/.codex/agents/*.toml`). L'installation ne remplace jamais un agent que tu as déjà.
+### Ajouter tes propres agents
 
-## Ajouter tes propres agents
+Un agent, c'est un simple fichier texte :
 
-Un agent, c'est un simple fichier texte. Agents Hub l'affiche automatiquement :
+| | Claude Code | Codex |
+|---|---|---|
+| Pour un seul projet | `.claude/agents/mon-agent.md` | `.codex/agents/mon-agent.toml` |
+| Pour tous tes projets | `~/.claude/agents/mon-agent.md` | `~/.codex/agents/mon-agent.toml` |
 
-- **Pour un seul projet** : crée `.claude/agents/mon-agent.md` à la racine du projet (Codex : `.codex/agents/mon-agent.toml`).
-- **Pour tous tes projets** : crée `~/.claude/agents/mon-agent.md` (Codex : `~/.codex/agents/mon-agent.toml`).
-
-Exemple minimal pour Claude Code :
+Exemple pour Claude Code :
 
 ```markdown
 ---
@@ -52,61 +75,31 @@ description: Écrit et lance les tests du projet.
 Tu écris des tests clairs pour chaque fonctionnalité, puis tu les lances.
 ```
 
-Redémarre Claude Code pour qu'il voie le nouvel agent. Dans le hub, les agents d'un projet portent le nom du projet en badge.
+Exemple pour Codex :
 
-## Installation
+```toml
+name = "testeur"
+description = "Écrit et lance les tests du projet."
+developer_instructions = """
+Tu écris des tests clairs pour chaque fonctionnalité, puis tu les lances.
+"""
+```
 
-Prérequis : macOS ou Linux, Python 3.8+, Claude Code et/ou Codex. Chrome/Chromium est facultatif (sinon le navigateur par défaut est utilisé).
+Redémarre Claude Code ou Codex pour qu'il voie le nouvel agent.
+
+## Mettre à jour
 
 ```sh
-git clone https://github.com/marissa274/agents-hub
 cd agents-hub
+git pull
 ./install.sh
 ```
 
-L'installation ne touche à rien d'existant : elle copie les agents et le skill `hub` dans `~/.claude` et ajoute ses hooks à `settings.json`, qu'elle sauvegarde d'abord (dans `backups/`). Redémarre ensuite Claude Code pour charger les hooks et les nouveaux agents.
-
-**Codex** est configuré automatiquement s'il est détecté (dossier `~/.codex` ou commande `codex`) : l'installation ajoute `~/.codex/hooks.json` (ou le complète, en le sauvegardant d'abord), les agents `~/.codex/agents/*.toml` et le skill `~/.codex/skills/hub`.
-
-- **Dans Codex, tape `/hooks` et approuve les hooks d'Agents Hub.** Codex n'exécute un hook qu'après ton accord ; l'approbation est à refaire si tu déplaces le dépôt ou si la commande change.
-- `./install.sh --no-codex` ignore Codex ; la variable `CODEX_HOME` change le dossier de Codex (`CLAUDE_CONFIG_DIR` fait de même pour Claude Code).
-- Si tu as déjà un skill `~/.codex/skills/hub` à toi, il est conservé : renomme-le (ou supprime-le), puis relance l'installation pour installer celui d'Agents Hub.
-- Le sandbox de Codex peut empêcher `score.py` et `bin/hub` d'écrire hors du projet : autorise ces commandes quand Codex le demande (ou ajoute les `logs/` d'Agents Hub dans `~/.codex/config.toml`) :
-
-  ```toml
-  [sandbox_workspace_write]
-  writable_roots = ["<chemin du dépôt>/logs"]
-  ```
-- Après une mise à jour d'Agents Hub, redémarre le serveur (ferme les fenêtres puis relance `bin/hub`).
-
-### Claude Code et Codex : ce qui est pareil
-
-| | Claude Code | Codex |
-|---|---|---|
-| Ouverture de la fenêtre | seulement via `/hub` (ou demande explicite) | seulement via `$hub` (ou demande explicite) |
-| Titre de la tâche | titre de Claude Code | nom du fil Codex (`session_index.jsonl`), sinon premier prompt |
-| Bugs du reviewer par tâche | oui | oui (`CODEX_THREAD_ID`) |
-| Agents de base | `~/.claude/agents/*.md` | `~/.codex/agents/*.toml` |
-| Skill `hub` | `~/.claude/skills/hub` | `~/.codex/skills/hub` |
-| Alertes (question, permission, fin) | oui | oui (hook `PermissionRequest` inclus) |
-
-Sans hooks approuvés, Codex reste suivi en lecture des sessions (`~/.codex/sessions`), avec un peu moins de détails.
-
-## Utilisation
-
-Dans Claude Code, dis « ouvre mon hub » ou tape `/hub`. Tu peux aussi lancer `bin/hub` dans un terminal.
-
-Dans Codex, demande « ouvre mon hub » (le skill `hub` s'en charge) ou lance `bin/hub`. Si les hooks ne semblent pas actifs, tape `/hooks` et approuve ceux d'Agents Hub.
-
-Aucune fenêtre ne s'ouvre toute seule : elle s'ouvre seulement quand tu tapes `/hub` (Claude Code), `$hub` (Codex) ou demandes explicitement d'ouvrir le hub. « Utilise mes agents » fait travailler l'équipe sans ouvrir de fenêtre. Les hooks enregistrent l'activité en arrière-plan pour que tout soit là à l'ouverture. Après une mise à jour, relance `./install.sh` : l'ancien hook d'ouverture automatique est retiré.
-
-## Ajouter un autre outil (Cursor, Gemini…)
-
-Copie `bin/adapters/codex.py`, adapte le nom, le dossier des sessions et la lecture des lignes, puis ajoute le module à `bin/adapters/__init__.py` (et une entrée dans `ui/index.html`). Les contributions sont bienvenues.
+Si le hub ouvert n'affiche pas les nouveautés, arrête son serveur (`pkill -f agents-hub/bin/server.py`), puis rouvre-le avec `/hub`.
 
 ## Vie privée
 
-Tout reste sur ta machine : le serveur n'écoute que sur `127.0.0.1`. Le dossier `logs/` contient tes prompts : il est ignoré par git et ne doit jamais être publié.
+Tout reste sur ta machine : le hub n'écoute que sur `127.0.0.1` et n'envoie rien sur internet. Le dossier `logs/` contient tes messages et l'activité de tes agents : il est ignoré par git, ne le publie jamais.
 
 ## Désinstaller
 
@@ -114,12 +107,20 @@ Tout reste sur ta machine : le serveur n'écoute que sur `127.0.0.1`. Le dossier
 ./uninstall.sh
 ```
 
-Retire les hooks, les agents et le skill installés (un fichier que tu as modifié est conservé). Les logs et le dépôt ne sont pas touchés.
+Retire les hooks, les agents et le skill installés (un fichier que tu as modifié est conservé). Tes logs et le dossier du projet ne sont pas touchés.
 
-## Limites
+## Options et cas particuliers
 
+- `./install.sh --no-codex` : n'installe rien pour Codex.
+- `CODEX_HOME` et `CLAUDE_CONFIG_DIR` : si Codex ou Claude Code ne sont pas dans leur dossier habituel.
+- Tu as déjà un skill `hub` à toi : il est conservé. Renomme-le puis relance `./install.sh` pour installer celui d'Agents Hub.
+- Tu déplaces le dossier `agents-hub` : relance `./install.sh` (et `/hooks` dans Codex).
+- Sans hooks approuvés, Codex reste suivi en lisant ses fichiers de session, avec un peu moins de détails.
 - Windows n'est pas encore supporté.
-- Si tu déplaces le dossier, relance `./install.sh`.
+
+## Contribuer
+
+Les contributions sont bienvenues. Pour ajouter un autre outil (Cursor, Gemini…), copie `bin/adapters/codex.py`, adapte-le, puis ajoute-le à `bin/adapters/__init__.py`. Les tests se lancent avec `python3 -m unittest discover tests`.
 
 ## Licence
 
