@@ -34,7 +34,7 @@ ceux de l'adaptateur pour cette session ; l'adaptateur retarde les siens de DELA
 en premier. Sans hook reçu, l'adaptateur reste un repli complet.
 """
 import glob, json, os, re, time, threading
-from common import short, CODEX, task_key
+from common import short, CODEX, task_key, codex_tool, readable
 
 NAME = "codex"
 ROOT_DIR = os.path.realpath(os.path.join(CODEX, "sessions"))
@@ -49,9 +49,9 @@ def tool_detail(p):
     try: a = json.loads(raw) if isinstance(raw, str) else raw
     except Exception: a = raw
     if isinstance(a, dict):
-        if p.get("name") == "spawn_agent":
+        if codex_tool(p.get("name")) == "spawn_agent":
             who = a.get("agent_type") or a.get("role") or a.get("task_name") or ""
-            what = a.get("message") or a.get("items") or ""
+            what = readable(a.get("message")) or a.get("items") or ""
             what = what if isinstance(what, str) else short(what)
             return short(f"{who}: {what}" if isinstance(who, str) and who else what)
         for k in ("agent_type", "role", "message", "description", "cmd", "command", "path", "query", "items"):
@@ -116,7 +116,7 @@ class File:
         if t == "session_meta" and sub:
             return {**base, "event": "SubagentStart", "detail": getattr(self, "nick", "")}
         if t == "response_item" and p.get("type") in ("function_call", "custom_tool_call"):
-            return {**base, "event": "PreToolUse", "tool": p.get("name") or "outil", "detail": tool_detail(p)}
+            return {**base, "event": "PreToolUse", "tool": codex_tool(p.get("name")) or "outil", "detail": tool_detail(p)}
         if t == "response_item" and p.get("type") == "message" and p.get("role") == "user" and not sub:
             txt = " ".join(c.get("text", "") for c in p.get("content") or [] if isinstance(c, dict))
             if txt.strip() and not txt.lstrip().startswith("<"):

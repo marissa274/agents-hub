@@ -2,6 +2,7 @@ import json, os, runpy, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "bin"))  # « common » importable même si ce fichier est lancé seul
 SID = "019fcab7-7be9-73c1-a013-165682ee3abb"
 
 
@@ -40,6 +41,17 @@ class LogEventTest(unittest.TestCase):
         for key in ("command", "input", "patch"):
             e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {key: patch}})
             self.assertEqual(e["detail"], "a/new.py, b.py, c.txt", key)
+
+    def test_spawn_agent_real_codex_payload(self):
+        # forme réelle (Codex 0.164) : outil préfixé « collaboration », mission chiffrée « gAAAAA… »
+        sealed = "gAAAAABrA2hrHG0r5-EEBxDylDUzbOgg4f86U998G_uz5dyND5dfC8e8mOK3ykovAIGFBnhCRIwXnyR_vKYPDe8gFaUaPd"
+        e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "collaborationspawn_agent",
+                        "tool_input": {"task_name": "revue_calc", "agent_type": "reviewer", "message": sealed}})
+        self.assertEqual((e["tool"], e["detail"]), ("spawn_agent", "reviewer: revue_calc"))
+        e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "collaborationwait_agent", "tool_input": {"timeout_ms": 60000}})
+        self.assertEqual(e["tool"], "wait_agent")
+        e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "spawn_agent", "tool_input": {"task_name": "revue_calc", "message": sealed}})
+        self.assertNotIn("gAAAA", e["detail"])
 
     def test_spawn_agent_task_name_only(self):
         # vrais rollouts Codex : {message, task_name} sans agent_type (la carte du sous-agent porte task_name)

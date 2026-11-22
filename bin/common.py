@@ -63,3 +63,17 @@ def task_key(uuid, source="claude"):
 def short(v, n=220):
     s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
     return s if len(s) <= n else s[:n] + " …"
+
+
+_CODEX_NS = re.compile(r"^collaboration[._]?")
+_SEALED = re.compile(r"^gAAAAA[A-Za-z0-9_=-]{40,}$")
+
+
+def codex_tool(name):
+    """Nom d'outil Codex sans espace de noms : « collaborationspawn_agent » -> « spawn_agent »."""
+    return _CODEX_NS.sub("", name) if isinstance(name, str) else ""
+
+
+def readable(text):
+    """Texte lisible, ou "" si Codex l'a chiffré (mission d'un sous-agent : jeton « gAAAAA… »)."""
+    return "" if isinstance(text, str) and _SEALED.match(text.strip()) else text

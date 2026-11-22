@@ -6,7 +6,7 @@ avec le code 0 et n'écrit jamais sur la sortie standard (Codex lirait ce texte 
 """
 import json, re, sys, time, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import EV as LOG, short, task_key
+from common import EV as LOG, short, task_key, codex_tool, readable
 MAX_LOG = 50 * 1024 * 1024  # au-delà, le journal passe dans events.1.jsonl
 CODEX_MODE = "--source" in sys.argv and sys.argv[sys.argv.index("--source") + 1:][:1] == ["codex"]
 try:
@@ -45,7 +45,7 @@ def codex_event(d):
     if event == "UserPromptSubmit" and sub: return None
     ti = d.get("tool_input")
     ti_d = ti if isinstance(ti, dict) else {}
-    tool = d.get("tool_name") if isinstance(d.get("tool_name"), str) else ""
+    tool = codex_tool(d.get("tool_name"))
     detail, kind = "", ""
 
     def tool_detail():
@@ -57,8 +57,9 @@ def codex_event(d):
             # Dans les vrais rollouts, la plupart des spawn_agent n'ont que {message, task_name} ; Codex nomme alors
             # le sous-agent d'après task_name (thread_spawn.agent_path = /root/<task_name>). Même nom que sa carte.
             who = ti_d.get("agent_type") or ti_d.get("role") or ti_d.get("task_name") or ""
-            what = ti_d.get("message") or ti_d.get("items") or ""
+            what = readable(ti_d.get("message")) or ti_d.get("items") or ""
             what = what if isinstance(what, str) else short(what)
+            if not what and who: what = ti_d.get("task_name") if who != ti_d.get("task_name") else ""
             # sans nom : pas de « : … » (l'interface en ferait une carte fantôme), le texte reste dans le flux
             return f"{who}: {what}" if isinstance(who, str) and who else what
         if tool == "update_plan":
