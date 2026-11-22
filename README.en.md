@@ -6,7 +6,7 @@ A live dashboard that shows what your Claude Code and Codex agents are doing.
 
 ## Why
 
-I couldn't see my agents while they were working, so I built Agents Hub: a dashboard that shows, live, what my Claude Code and Codex agents are doing. It's my first open source project. I'm sharing it so anyone can use it, adapt it to their needs and fix the issues they run into.
+I couldn't see my agents while they were working, so I built Agents Hub: a dashboard that shows, live, what my Claude Code and Codex agents are doing. It's my first source-available project. I'm sharing it so anyone can use it, adapt it to their needs and fix the issues they run into.
 
 ![Agents Hub](docs/screenshot.png)
 
@@ -126,6 +126,8 @@ Contributions are welcome. To add another tool (Cursor, Gemini…), copy `bin/ad
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE): you may use, copy, modify and share Agents Hub **for free, for noncommercial purposes** (personal use, study, research, nonprofits…).
+
+**Selling Agents Hub, or using it in a paid product or service, requires my permission.** For a commercial license, contact me on [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
 
 Made by [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)

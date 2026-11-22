@@ -6,7 +6,7 @@ Un tableau de bord qui montre en direct ce que font tes agents Claude Code et Co
 
 ## Pourquoi
 
-Je n'arrivais pas à voir mes agents travailler, alors j'ai créé Agents Hub : un tableau de bord qui montre en direct ce que font mes agents Claude Code et Codex. C'est mon premier projet open source : je le partage pour que tout le monde puisse l'utiliser, l'adapter à ses besoins et régler les problèmes qu'il rencontre.
+Je n'arrivais pas à voir mes agents travailler, alors j'ai créé Agents Hub : un tableau de bord qui montre en direct ce que font mes agents Claude Code et Codex. C'est mon premier projet au code ouvert : je le partage pour que tout le monde puisse l'utiliser, l'adapter à ses besoins et régler les problèmes qu'il rencontre.
 
 ![Agents Hub](docs/screenshot.png)
 
@@ -124,6 +124,8 @@ Les contributions sont bienvenues. Pour ajouter un autre outil (Cursor, Gemini�
 
 ## Licence
 
-MIT, voir [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE) : tu peux utiliser, copier, modifier et partager Agents Hub **gratuitement, pour un usage non commercial** (personnel, études, recherche, association…).
+
+**Vendre Agents Hub, ou l'utiliser dans un produit ou un service payant, demande mon accord.** Pour une licence commerciale, contacte-moi sur [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
 
 Créé par [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)
