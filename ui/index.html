@@ -131,7 +131,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;padding-blo
 .badge.codex{color:var(--fg)}
 .now{font-size:12.5px;background:var(--subtle);border-radius:8px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-size:11.5px;border:1px solid var(--border);border-radius:6px;padding:0 6px;color:var(--muted)}
+.chip{font-size:11.5px;border:1px solid var(--border);border-radius:6px;padding:0 6px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip.skill{border-color:color-mix(in srgb,var(--primary) 40%,var(--border));color:var(--primary-text);background:var(--primary-soft)}
 .idle-list{display:flex;flex-wrap:wrap;gap:6px}
 .idle-list button{all:unset;cursor:pointer;font-size:12.5px;border:1px dashed var(--input);border-radius:8px;padding:3px 9px;color:var(--muted)}
@@ -472,12 +472,14 @@ function render(){
   if(openName!==null) loadTranscript(false);
 }
 function winName(s){ const t=taskTitle(s); return (base(s.cwd)||"projet")+(t?" · "+t:""); }
+/* « mcp__codex_apps__github__list_recent_issues » -> « github · list_recent_issues » */
+function toolLabel(k){ if(!/^mcp__/.test(k)) return k; const p=k.split("__").filter(Boolean); return p.length>2?p[p.length-2]+" · "+p[p.length-1]:p.slice(1).join(" · "); }
 function card(n,a,s){
   const dot=a.status==="active"?"on":a.status==="done"?"done":"";
   const st=a.status==="active"?"En cours":a.status==="done"?"Terminé":"Prêt";
   const scope=roles[n]&&roles[n].scope!=="global"?`<span class="badge">${esc(roles[n].scope)}</span>`:"";
   const skills=Object.entries(a.skills).map(([k,v])=>`<span class="chip skill">skill · ${esc(k)}${v>1?" ×"+v:""}</span>`).join("");
-  const tools=Object.entries(a.toolsUsed).filter(([k])=>k!=="Skill").sort((x,y)=>y[1]-x[1]).slice(0,5).map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join("");
+  const tools=Object.entries(a.toolsUsed).filter(([k])=>k!=="Skill").sort((x,y)=>y[1]-x[1]).slice(0,5).map(([k,v])=>`<span class="chip" title="${esc(k)}">${esc(toolLabel(k))} ${v}</span>`).join("");
   return `<button class="agent ${a.status==="active"?"active":""}" data-name="${esc(n)}" type="button">
     <div class="ah"><span class="av">${esc(initials(n))}</span><div style="min-width:0"><div class="an">${esc(nameOf(n))}</div>
     <div class="as"><span class="dot ${dot}"></span>${st} · ${a.tools} actions <span class="badge ${isCodex(n)?"codex":""}">${isCodex(n)?"Codex":"Claude"}</span>${scope}</div></div></div>
