@@ -36,8 +36,7 @@ def codex_commands():
 def commands():
     """[(événement, matcher ou None, commande)] des hooks du Hub."""
     log = f"python3 {shlex.quote(os.path.join(ROOT, 'bin', 'log_event.py'))}"
-    win = f"python3 {shlex.quote(os.path.join(ROOT, 'bin', 'open_window.py'))} --hook >/dev/null 2>&1"
-    return [("PreToolUse", "*", log), ("PreToolUse", "Agent|Task", win),
+    return [("PreToolUse", "*", log),
             ("SubagentStart", "*", log), ("SubagentStop", "*", log),
             ("UserPromptSubmit", None, log), ("Stop", None, log), ("Notification", None, log)]
 
@@ -262,11 +261,15 @@ def install(force, no_codex=False):
 
     # 3. hooks Claude
     moved = bool(man.get("root") and man.get("root") != ROOT)
-    if moved and old_cmds:
-        n = remove_commands(settings, old_cmds)
-        print(f"Anciens hooks retirés ({man['root']}) : {n}")
+    wanted = {c for _, _, c in commands()}
+    # moved : tout l'ancien jeu part ; sinon, seules les commandes du manifeste qui ne font plus partie de l'ensemble voulu
+    stale = old_cmds if moved else [c for c in old_cmds if c not in wanted]
+    removed = 0
+    if stale:
+        removed = remove_commands(settings, stale)
+        print(f"Anciens hooks retirés ({man['root']}) : {removed}" if moved else f"Hooks obsolètes retirés : {removed}")
     added = add_hooks(settings, commands())
-    if added or (moved and old_cmds):
+    if added or removed:
         backup(SETTINGS, "settings.json")
         write_json(SETTINGS, settings)
         print(f"Hooks ajoutés dans {SETTINGS} : {len(added)}")
@@ -277,15 +280,18 @@ def install(force, no_codex=False):
     created = bool(man.get("codex_hooks_created"))
     if with_codex:
         if not codex_existed and not os.path.isdir(CODEX): os.makedirs(CODEX, mode=0o700, exist_ok=True)
-        if moved and old_ccmds:
-            n = remove_commands(chooks, old_ccmds)
-            print(f"Anciens hooks Codex retirés ({man['root']}) : {n}")
+        cwanted = {c for _, _, c in ccmds}
+        cstale = old_ccmds if moved else [c for c in old_ccmds if c not in cwanted]
+        cremoved = 0
+        if cstale:
+            cremoved = remove_commands(chooks, cstale)
+            print(f"Anciens hooks Codex retirés ({man['root']}) : {cremoved}" if moved else f"Hooks Codex obsolètes retirés : {cremoved}")
         cadded = add_hooks(chooks, ccmds)
-        if cadded or (moved and old_ccmds):
+        if cadded or cremoved:
             if codex_existed: backup(CODEX_HOOKS, "codex-hooks.json")
             else: created = True
             write_json(CODEX_HOOKS, chooks)
-            print(f"Hooks Codex ajoutés dans {CODEX_HOOKS} : {len(cadded)}")
+            if cadded: print(f"Hooks Codex ajoutés dans {CODEX_HOOKS} : {len(cadded)}")
         else:
             print("Hooks Codex déjà en place.")
     elif not no_codex:
@@ -300,7 +306,7 @@ def install(force, no_codex=False):
         for k in ("codex_home", "codex_commands", "codex_hooks_created"):
             if k in man: new[k] = man[k]
     write_atomic(MANIFEST, json.dumps(new, indent=2, ensure_ascii=False) + "\n")
-    print("Terminé. Redémarrez Claude Code pour charger les hooks, puis lancez bin/hub.")
+    print("Terminé. Redémarrez Claude Code pour charger les hooks, puis tape /hub (ou lance bin/hub).")
     if with_codex:
         print("Dans Codex : tape /hooks et approuve les hooks d'Agents Hub (à refaire si le dépôt est déplacé).")
     return 0

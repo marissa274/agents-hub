@@ -15,7 +15,7 @@ Interface d'un adaptateur :
 Format d'un événement (un objet JSON par ligne dans events.jsonl) :
   ts          float, secondes Unix
   event       UserPromptSubmit | PreToolUse | SubagentStart | SubagentStop | Stop | Notification
-  session     identifiant court de la session (8 caractères)
+  session     clé courte de la tâche (common.task_key : 8 derniers caractères de l'UUID du fil racine)
   agent_id    identifiant du sous-agent ("" pour l'orchestrateur)
   agent       nom de l'agent ("" ou NAME pour l'orchestrateur)
   tool        nom de l'outil appelé (PreToolUse)
@@ -34,7 +34,7 @@ ceux de l'adaptateur pour cette session ; l'adaptateur retarde les siens de DELA
 en premier. Sans hook reçu, l'adaptateur reste un repli complet.
 """
 import glob, json, os, re, time, threading
-from common import short, CODEX
+from common import short, CODEX, task_key
 
 NAME = "codex"
 ROOT_DIR = os.path.realpath(os.path.join(CODEX, "sessions"))
@@ -72,7 +72,7 @@ class File:
             self.ready = True
             self.thread, self.cwd = meta.get("id", ""), meta.get("cwd", "")
             # sous-agents rangés avec la tâche racine (session_id), à défaut avec leur parent
-            self.session = str(meta.get("session_id") or meta.get("parent_thread_id") or meta.get("id") or "")[:8]
+            self.session = task_key(meta.get("session_id") or meta.get("parent_thread_id") or meta.get("id") or "", "codex")
             src = meta.get("source")
             spawn = src.get("subagent", {}).get("thread_spawn") if isinstance(src, dict) else None
             if isinstance(src, dict) and "subagent" in src and not spawn:
@@ -167,11 +167,11 @@ def find_session(sid):
     """Fichier de l'orchestrateur Codex d'une session (celui sans parent_thread_id)."""
     best = ""
     if not sid or not sid.isalnum(): return best
-    for f in glob.glob(f"{SESS}/*/*/*/*-{sid}*.jsonl"):
+    for f in glob.glob(f"{glob.escape(SESS)}/*/*/*/*{sid}.jsonl"):
         try:
             with open(f) as fh: meta = json.loads(fh.readline()).get("payload") or {}
         except Exception: continue
-        if meta.get("parent_thread_id") or not str(meta.get("id", "")).startswith(sid): continue
+        if meta.get("parent_thread_id") or task_key(meta.get("id", ""), "codex") != sid: continue
         if not best or os.path.getmtime(f) > os.path.getmtime(best): best = f
     return best
 
@@ -215,10 +215,10 @@ def title(sid):
                 if not isinstance(d, dict): continue
                 i, n = d.get("id"), d.get("thread_name")
                 if not isinstance(i, str) or not isinstance(n, str) or not n.strip() or n.strip().startswith("Guardian review"): continue
-                c["map"].pop(i[:8], None); c["map"][i[:8]] = n.strip()
+                k = task_key(i, "codex"); c["map"].pop(k, None); c["map"][k] = n.strip()
                 if len(c["map"]) > 5000: c["map"].pop(next(iter(c["map"])))
             c["off"], c["sig"] = start + end, sig
-        return short(c["map"].get(sid[:8], ""), 200) if isinstance(sid, str) and sid else ""
+        return short(c["map"].get(sid, ""), 200) if isinstance(sid, str) and sid else ""
     except Exception:
         return ""
 

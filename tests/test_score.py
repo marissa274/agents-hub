@@ -49,7 +49,7 @@ class ScoreTest(unittest.TestCase):
     def test_codex_thread_resolves_to_root_task(self):
         tmp = tempfile.mkdtemp(prefix="hub-score-"); self.addCleanup(shutil.rmtree, tmp, True)
         codex = os.path.join(tmp, "codex"); d = os.path.join(codex, "sessions", "2026", "01", "01"); os.makedirs(d)
-        root_tid, sub_tid, lost_tid = "aaaa1111-0000-0000-0000-000000000000", "bbbb2222-0000-0000-0000-000000000000", "cccc3333-0000-0000-0000-000000000000"
+        root_tid, sub_tid, lost_tid = "019fcab7-7be9-73c1-a013-0000aaaa1111", "019fcab7-7bea-73c1-a013-0000bbbb2222", "019fcab7-7beb-73c1-a013-0000cccc3333"
         for tid, meta in ((root_tid, {"id": root_tid}), (sub_tid, {"id": sub_tid, "session_id": root_tid, "parent_thread_id": "zzzz9999-x"})):
             with open(os.path.join(d, f"rollout-x-{tid}.jsonl"), "w") as f: f.write(json.dumps({"type": "session_meta", "payload": meta}) + "\n")
         def run(extra, *args):
@@ -62,7 +62,7 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual(run({"CODEX_THREAD_ID": sub_tid}, *add).returncode, 0)    # sous-agent : tâche racine
         self.assertEqual(run({"CODEX_THREAD_ID": lost_tid}, *add).returncode, 0)   # rollout introuvable : son id
         with open(os.path.join(tmp, "data", "scores.json")) as f: bugs = json.load(f)["bugs"]
-        self.assertEqual([b["session"] for b in bugs], ["aaaa1111", "aaaa1111", "cccc3333"])
+        self.assertEqual([b["session"] for b in bugs], ["aaaa1111", "aaaa1111", "cccc3333"])  # 8 derniers caractères : UUIDv7 au même préfixe, tâches distinctes
         self.assertEqual([b["thread"] for b in bugs], [root_tid, sub_tid, lost_tid])
         self.assertEqual([b["id"] for b in bugs], ["C1-B1", "C1-B2", "C1-B1"])  # la numérotation est celle de la tâche racine
         self.assertIn("10 pts", run({"CODEX_THREAD_ID": sub_tid}, "total").stdout)

@@ -4,6 +4,7 @@ from unittest import mock
 os.environ["AGENTS_HUB_DATA"] = tempfile.mkdtemp(prefix="hub-codex-data-")  # common crée ce dossier à l'import : jamais ROOT/logs
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin"))
 from adapters import codex
+from common import task_key
 
 
 class OffsetTest(unittest.TestCase):
@@ -32,7 +33,7 @@ class MetaAndUtf8Test(unittest.TestCase):
             with open(p, "w") as f: f.write(self.META + self.CALL)
             evs = fl.read()
             self.assertEqual(len(evs), 1)
-            self.assertEqual(evs[0]["session"], "abcdef12")
+            self.assertEqual(evs[0]["session"], "ef123456")  # 8 derniers caractères
             self.assertEqual(evs[0]["cwd"], "/w")
 
     def test_utf8_char_split_between_reads(self):
@@ -54,6 +55,9 @@ def write(p, t):
     with open(p, "w") as f: f.write(t)
 
 
+def U(tail8): return f"019fcab7-7be9-73c1-a013-0123{tail8}"
+
+
 def meta(**kw): return json.dumps({"type": "session_meta", "payload": kw}) + "\n"
 
 
@@ -61,12 +65,37 @@ class SessionIdTest(unittest.TestCase):
     def test_session_id_beats_parent_and_id(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "r.jsonl")
-            write(p, meta(id="child0001-x", session_id="root0001-y", parent_thread_id="par00001-z", cwd="/w"))
-            self.assertEqual(codex.File(p).session, "root0001")
-            write(p, meta(id="child0001-x", parent_thread_id="par00001-z"))
-            self.assertEqual(codex.File(p).session, "par00001")
-            write(p, meta(id="child0001-x"))
-            self.assertEqual(codex.File(p).session, "child000")
+            child, root, par = U("c0c0c0c0"), U("a1a1a1a1"), U("b2b2b2b2")
+            write(p, meta(id=child, session_id=root, parent_thread_id=par, cwd="/w"))
+            self.assertEqual(codex.File(p).session, "a1a1a1a1")
+            write(p, meta(id=child, parent_thread_id=par))
+            self.assertEqual(codex.File(p).session, "b2b2b2b2")
+            write(p, meta(id=child))
+            self.assertEqual(codex.File(p).session, "c0c0c0c0")
+
+    def test_uuidv7_same_prefix_gives_different_keys(self):
+        a, b = "019fcab7-7be9-73c1-a013-165682ee3abb", "019fcab7-7bea-7f02-9c44-0123456789ab"
+        self.assertEqual(a[:8], b[:8])
+        self.assertNotEqual(task_key(a, "codex"), task_key(b, "codex"))
+        self.assertEqual(task_key(a, "codex"), "5682ee3abb"[-8:])
+        self.assertEqual(task_key(a), "019fcab7")  # Claude : 8 premiers, inchangé
+        self.assertEqual(task_key(None, "codex"), "")
+
+    def test_same_thread_same_key_everywhere(self):
+        """Hook, adaptateur (session, titre, recherche) et score donnent la même clé ; un sous-agent revient à la racine."""
+        root, sub = "019fcab7-7be9-73c1-a013-165682ee3abb", "019fcab7-7c00-7aaa-8bbb-0123456789ab"
+        key = task_key(root, "codex")
+        with tempfile.TemporaryDirectory() as d:
+            pr = os.path.join(d, "2026", "01", "02", f"rollout-x-{root}.jsonl"); ps = os.path.join(d, "2026", "01", "02", f"rollout-x-{sub}.jsonl")
+            write(pr, meta(id=root, cwd="/w")); write(ps, meta(id=sub, session_id=root, parent_thread_id=root, cwd="/w"))
+            idx = os.path.join(d, "session_index.jsonl"); write(idx, json.dumps({"id": root, "thread_name": "Ma tâche"}) + "\n")
+            with mock.patch.object(codex, "SESS", d), mock.patch.object(codex, "INDEX", idx), \
+                 mock.patch.dict(codex._TITLES, {"sig": None, "off": 0, "map": {}}):
+                self.assertEqual(codex.File(pr).session, key)
+                self.assertEqual(codex.File(ps).session, key)  # sous-agent : racine
+                self.assertEqual(codex.title(key), "Ma tâche")
+                self.assertEqual(codex.find_session(key), pr)
+                self.assertEqual(task_key(codex.root_session(sub), "codex"), key)
 
 
 class FindThreadTest(unittest.TestCase):
@@ -101,16 +130,16 @@ class TitleTest(unittest.TestCase):
         self.assertEqual(codex.title(None), "")
 
     def test_last_line_wins_and_guardian_ignored(self):
-        write(self.idx, self.line("abcdef12-0000", "Ancien") + self.line("abcdef12-0000", "Nouveau") + self.line("zzzzzzzz-0", "Autre")
-              + self.line("11112222-0", "Guardian review of x"))
+        write(self.idx, self.line(U("abcdef12"), "Ancien") + self.line(U("abcdef12"), "Nouveau") + self.line(U("99999999"), "Autre")
+              + self.line(U("11112222"), "Guardian review of x"))
         self.assertEqual(codex.title("abcdef12"), "Nouveau")
-        self.assertEqual(codex.title("zzzzzzzz"), "Autre")
+        self.assertEqual(codex.title("99999999"), "Autre")
         self.assertEqual(codex.title("11112222"), "")
 
     def test_incremental_cache_and_incomplete_line(self):
-        write(self.idx, self.line("abcdef12-0", "Un"))
+        write(self.idx, self.line(U("abcdef12"), "Un"))
         self.assertEqual(codex.title("abcdef12"), "Un")
-        with open(self.idx, "a") as f: f.write('{"id":"abcdef12-0","thread_na')  # ligne coupée
+        with open(self.idx, "a") as f: f.write('{"id":"019fcab7-7be9-73c1-a013-0123abcdef12","thread_na')  # ligne coupée
         self.assertEqual(codex.title("abcdef12"), "Un")
         with open(self.idx, "a") as f: f.write('me":"Deux"}\n')
         self.assertEqual(codex.title("abcdef12"), "Deux")
@@ -119,7 +148,7 @@ class TitleTest(unittest.TestCase):
         with mock.patch("builtins.open", side_effect=lambda *a, **k: (calls.append(a), real(*a, **k))[1]):
             self.assertEqual(codex.title("abcdef12"), "Deux")  # fichier inchangé : aucune relecture
         self.assertEqual(calls, [])
-        write(self.idx, self.line("abcdef12-0", "Court"))  # fichier remplacé, plus petit
+        write(self.idx, self.line(U("abcdef12"), "Court"))  # fichier remplacé, plus petit
         self.assertEqual(codex.title("abcdef12"), "Court")
 
 
@@ -141,7 +170,7 @@ class DelayTest(unittest.TestCase):
                 t = threading.Thread(target=codex.loop, args=(lambda evs: got.append((time.time(), evs)),), daemon=True); t.start()
                 time.sleep(0.3)
                 t0 = time.time()
-                write(os.path.join(d, "2026", "01", "01", "rollout-x-abcdef12-0000.jsonl"), meta(id="abcdef12-0000", cwd="/w") + TOOL)
+                write(os.path.join(d, "2026", "01", "01", "rollout-x-" + U("abcdef12") + ".jsonl"), meta(id=U("abcdef12"), cwd="/w") + TOOL)
                 time.sleep(1.6)
                 self.assertEqual(got, [])  # pas encore émis : le hook a le temps de passer devant
                 for _ in range(40):

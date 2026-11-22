@@ -14,7 +14,8 @@ Je n'arrivais pas à voir mes agents travailler, alors j'ai créé Agents Hub : 
 
 - Affiche tes agents en direct : qui travaille, avec quel outil, sur quoi.
 - Fonctionne avec Claude Code et Codex.
-- Une fenêtre par tâche (Claude Code ou Codex), jamais deux pour la même tâche ; `bin/hub` sans argument ouvre une fenêtre qui suit la tâche en cours.
+- Une fenêtre par tâche (Claude Code ou Codex), jamais deux pour la même tâche ; `bin/hub` (ou `/hub`) ouvre la fenêtre de la tâche en cours.
+- La fenêtre s'ouvre seulement quand tu tapes `/hub` (Claude Code), `$hub` (Codex) ou demandes explicitement d'ouvrir le hub (le skill peut aussi orchestrer tes agents sans ouvrir de fenêtre) ; les hooks enregistrent l'activité en arrière-plan pour que tout soit là à l'ouverture.
 - Le titre de la tâche (« Projet · Titre ») s'affiche en haut de la page, repris de Claude Code ou, à défaut, du premier prompt.
 - Trois thèmes : Sombre (par défaut), Rose (rose sur fond noir) et Clair.
 - Un scoreboard pour le reviewer : bugs trouvés, confirmés ou rejetés, sur 3 cycles de revue.
@@ -82,7 +83,7 @@ L'installation ne touche à rien d'existant : elle copie les agents et le skill 
 
 | | Claude Code | Codex |
 |---|---|---|
-| Fenêtre automatique | au lancement d'un sous-agent | au lancement d'un sous-agent (`spawn_agent`) |
+| Ouverture de la fenêtre | seulement via `/hub` (ou demande explicite) | seulement via `$hub` (ou demande explicite) |
 | Titre de la tâche | titre de Claude Code | nom du fil Codex (`session_index.jsonl`), sinon premier prompt |
 | Bugs du reviewer par tâche | oui | oui (`CODEX_THREAD_ID`) |
 | Agents de base | `~/.claude/agents/*.md` | `~/.codex/agents/*.toml` |
@@ -97,7 +98,7 @@ Dans Claude Code, dis « ouvre mon hub » ou tape `/hub`. Tu peux aussi lancer `
 
 Dans Codex, demande « ouvre mon hub » (le skill `hub` s'en charge) ou lance `bin/hub`. Si les hooks ne semblent pas actifs, tape `/hooks` et approuve ceux d'Agents Hub.
 
-La fenêtre s'ouvre aussi toute seule quand Claude Code lance un sous-agent, et dans Codex au premier `spawn_agent` d'une tâche.
+Aucune fenêtre ne s'ouvre toute seule : elle s'ouvre seulement quand tu tapes `/hub` (Claude Code), `$hub` (Codex) ou demandes explicitement d'ouvrir le hub. « Utilise mes agents » fait travailler l'équipe sans ouvrir de fenêtre. Les hooks enregistrent l'activité en arrière-plan pour que tout soit là à l'ouverture. Après une mise à jour, relance `./install.sh` : l'ancien hook d'ouverture automatique est retiré.
 
 ## Ajouter un autre outil (Cursor, Gemini…)
 

@@ -1,10 +1,10 @@
 ---
 name: hub
-description: Ouvre la fenêtre Agents Hub (tableau de bord des agents en temps réel) et fait travailler une équipe d'agents : ceux du projet, ceux de la personne, ou les agents de base. À utiliser quand on dit « hub », « ouvre mon agent hub », « utilise mes agents / mes sous-agents / les agents de mon projet / mon équipe », ou qu'on demande les cycles du reviewer.
+description: Fait travailler une équipe d'agents (ceux du projet, ceux de la personne, ou les agents de base) et pilote les cycles du reviewer. À utiliser quand on tape /hub (ou $hub dans Codex), qu'on dit « utilise mes agents / mes sous-agents / les agents de mon projet / mon équipe », ou qu'on demande les cycles du reviewer. La fenêtre du tableau de bord ne s'ouvre que sur /hub ou sur demande explicite.
 ---
-1. Ouvre la fenêtre : `sh "__AGENTS_HUB__/bin/hub" --auto` (ne l'ouvre pas en double si elle est déjà ouverte).
+1. Fenêtre : n'exécute `sh "__AGENTS_HUB__/bin/hub"` QUE si la personne a tapé `/hub` (ou `$hub` dans Codex) ou demande explicitement d'ouvrir le hub. Sinon (par exemple « utilise mes agents » ou un cycle de reviewer), n'ouvre aucune fenêtre et fais seulement le travail d'équipe : l'activité est enregistrée de toute façon et sera là si elle ouvre le hub plus tard. La fenêtre n'est jamais ouverte en double.
 
-2. Sans tâche : ouvre seulement la fenêtre et dis que c'est fait.
+2. Sans tâche : si la fenêtre a été demandée, ouvre-la et dis que c'est fait ; sinon, demande ce qu'elle veut faire.
 
 3. Avec une tâche, tu es l'orchestrateur. Choisis l'équipe selon ce que la personne demande :
    - Fais l'inventaire avant de déléguer (à la racine du dépôt : `git rev-parse --show-toplevel`) :

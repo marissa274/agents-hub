@@ -1,4 +1,4 @@
-import contextlib, io, os, sys, tempfile, unittest
+import contextlib, io, json, os, sys, tempfile, unittest
 from unittest import mock
 
 # avant l'import : les chemins du Hub pointent vers un dossier temporaire
@@ -87,35 +87,25 @@ class Launch(unittest.TestCase):
 
 
 class Hook(unittest.TestCase):
-    def run_hook(self, stdin):
-        popen = mock.Mock()
-        with mock.patch.object(ow.subprocess, "Popen", popen), mock.patch.object(ow.sys, "stdin", io.StringIO(stdin)), \
-             mock.patch.object(ow, "port_open", side_effect=AssertionError("pas de travail dans le hook")):
+    def test_hook_is_a_silent_noop(self):
+        out = io.StringIO()
+        with mock.patch.object(ow.subprocess, "Popen", side_effect=AssertionError("rien à lancer")), \
+             mock.patch.object(ow, "launch", side_effect=AssertionError("pas de fenêtre")), \
+             mock.patch.object(ow, "port_open", side_effect=AssertionError("pas de travail dans le hook")), \
+             mock.patch.object(ow.sys, "stdin", io.StringIO('{"session_id": "abc"}')), contextlib.redirect_stdout(out):
             self.assertEqual(ow.main(["--hook"]), 0)
-        return popen.call_args
-
-    def test_hook_detaches_and_returns_fast(self):
-        args, kw = self.run_hook("{}")
-        self.assertNotIn("--hook", args[0])
-        self.assertEqual(args[0][2:], ["auto"])
-        self.assertTrue(kw["start_new_session"])
-        self.assertEqual(kw["stdin"], ow.subprocess.DEVNULL)
-        self.assertEqual(kw["stdout"], ow.subprocess.DEVNULL)
-
-    def test_hook_extracts_and_passes_sid(self):
-        args, kw = self.run_hook('{"session_id": "a1b2-c3d4-e5f6-0000"}')
-        self.assertEqual(args[0][2:], ["session", "a1b2c3d4"])
-
-    def test_hook_bad_json_falls_back_to_auto(self):
-        self.assertEqual(self.run_hook("pas du json")[0][0][2:], ["auto"])
+        self.assertEqual(out.getvalue(), "")
 
 
 class MainSession(unittest.TestCase):
+    def setUp(self): self.out = io.StringIO()
+
     def run_main(self, argv, win, last=None):
         launched = []
         with mock.patch.object(ow, "port_open", return_value=True), mock.patch.object(ow, "windows", return_value=win), \
              mock.patch.object(ow, "launch", side_effect=launched.append), mock.patch.object(ow.time, "sleep"), \
-             mock.patch.object(ow, "LAST", os.path.join(_tmp, "last-%d.json" % id(launched))):
+             mock.patch.object(ow, "LAST", os.path.join(_tmp, "last-%d.json" % id(launched))), \
+             contextlib.redirect_stdout(self.out):
             if last is not None:
                 with open(ow.LAST, "w") as f: f.write(last)
             rc = ow.main(argv)
@@ -127,6 +117,38 @@ class MainSession(unittest.TestCase):
 
     def test_session_already_shown_does_not_open(self):
         self.assertEqual(self.run_main(["session", "abc12345"], (1, 60, {"abc12345": 1}, 1))[1], [])
+
+    def test_no_arg_picks_session_from_claude_then_codex_root_then_auto(self):
+        win = (0, 60, {}, 0)
+        codex = os.path.join(_tmp, "codex"); d = os.path.join(codex, "sessions", "2026", "01", "02"); os.makedirs(d, exist_ok=True)
+        tid = "0000aaaa-1111-2222-3333-444455556666"
+        with open(os.path.join(d, f"rollout-x-{tid}.jsonl"), "w") as f:
+            f.write(json.dumps({"payload": {"id": tid, "session_id": "01234567-89ab-7cde-8f01-2345aaaa9999", "parent_thread_id": "p"}}) + "\n")
+        def run(env):
+            with mock.patch.dict(os.environ, env), mock.patch.object(ow, "codex_root", wraps=ow.codex_root), \
+                 mock.patch("common.CODEX", codex):
+                return self.run_main([], win)[1]
+        for k in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"): os.environ.pop(k, None)
+        self.assertEqual(run({"CLAUDE_CODE_SESSION_ID": "ab-cd12-34ef-9"}), [ow.URL + "#s-abcd1234"])
+        self.assertEqual(run({"CLAUDE_CODE_SESSION_ID": "ab-cd12-34ef-9", "CODEX_THREAD_ID": tid}), [ow.URL + "#s-abcd1234"])
+        self.assertEqual(run({"CODEX_THREAD_ID": tid}), [ow.URL + "#s-aaaa9999"])  # tâche racine, pas le fil
+        self.assertEqual(run({"CODEX_THREAD_ID": "ffeeddcc-0000-7000-8000-123456789abc"}), [ow.URL + "#s-56789abc"])  # rollout introuvable : le fil lui-même
+        self.assertEqual(run({}), [ow.URL])
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "abcd1234"}):
+            self.assertEqual(self.run_main(["--auto"], win)[1], [ow.URL])  # --auto force le mode auto
+
+    def test_already_open_for_this_task_says_so(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "abcd1234"}):
+            rc, l = self.run_main([], (1, 60, {"abcd1234": 1}, 1))
+        self.assertEqual((rc, l), (0, []))
+        self.assertEqual(self.out.getvalue(), "Agents Hub est déjà ouvert pour cette tâche.\n")
+
+    def test_grace_explicit_call_says_it_is_opening(self):
+        import json, time
+        last = json.dumps({"abc12345": time.time() - 5})
+        rc, l = self.run_main(["session", "abc12345"], (0, 60, {}, 0), last)
+        self.assertEqual((rc, l), (0, []))  # anti-doublon conservé
+        self.assertEqual(self.out.getvalue(), "Agents Hub est en train de s'ouvrir… si rien n'apparaît, réessaie dans quelques secondes.\n")
 
     def test_auto_url_without_pin(self):
         self.assertEqual(self.run_main(["auto"], (0, 60, {}, 0))[1], [ow.URL])
@@ -170,8 +192,9 @@ class Simulated(unittest.TestCase):
         self.patches = [mock.patch.object(ow.time, "time", self.clock.time), mock.patch.object(ow.time, "sleep", self.clock.sleep),
                         mock.patch.object(ow, "port_open", return_value=True), mock.patch.object(ow, "LAST", self.last),
                         mock.patch.object(ow, "launch", side_effect=self.launched.append)]
-        for p in self.patches: p.start()
-        self.addCleanup(lambda: [p.stop() for p in self.patches])
+        self.patches.append(contextlib.redirect_stdout(io.StringIO()))
+        for p in self.patches: p.__enter__() if isinstance(p, contextlib.redirect_stdout) else p.start()
+        self.addCleanup(lambda: [p.__exit__(None, None, None) if isinstance(p, contextlib.redirect_stdout) else p.stop() for p in self.patches])
 
     def run_main(self, argv, win):
         with mock.patch.object(ow, "windows", side_effect=win if callable(win) else (lambda: win)):

@@ -4,18 +4,16 @@ try:
     import tomllib  # Python 3.11+
 except ImportError:
     tomllib = None
-import glob, http.server, json, os, subprocess, sys, threading, time, urllib.parse
+import glob, http.server, json, os, sys, threading, time, urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, EV, SC, CLAUDE, CODEX, PORT, short
 from adapters import ADAPTERS
 
 PROJ = os.path.realpath(os.path.join(CLAUDE, "projects"))
 UI = os.path.join(ROOT, "ui", "index.html")
-OPEN_WINDOW = os.path.join(ROOT, "bin", "open_window.py")
 HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}  # contre le DNS rebinding
 START = time.time()
 WINDOWS = {}; WLOCK = threading.Lock()  # une entrée par connexion /api/alive (= une fenêtre) -> (tâche affichée, épinglée)
-last_launch = {}  # session -> dernière tentative d'ouverture
 
 def tool_summary(name, i):
     if not isinstance(i, dict): return short(i, 300)
@@ -201,7 +199,7 @@ def pinned():
 EVLOCK = threading.Lock()
 
 def emit(events):
-    """Appelé par les adaptateurs : écrit dans le flux et ouvre une fenêtre pour chaque tâche qui n'en a pas."""
+    """Appelé par les adaptateurs : écrit dans le flux (jamais d'ouverture de fenêtre : seul /hub en ouvre une)."""
     if not events: return
     known_cwds()  # met HOOKED à jour : une session dont les hooks écrivent déjà n'a pas besoin de l'adaptateur
     events = [e for e in events if not (isinstance(e, dict) and e.get("via") != "hook" and (e.get("source"), e.get("session")) in HOOKED)]
@@ -209,16 +207,6 @@ def emit(events):
     blob = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events).encode()
     with EVLOCK, open(EV, "ab") as f:
         f.write(blob)  # un seul write par lot
-    if os.environ.get("AGENTS_HUB_NO_WINDOW"): return  # tests : jamais de fenêtre
-    shown = views()
-    for sid in dict.fromkeys(e.get("session") for e in events if isinstance(e, dict)):
-        if not isinstance(sid, str) or not sid or not sid.isalnum() or shown.get(sid): continue
-        if time.time() - last_launch.get(sid, 0) <= 5: continue
-        last_launch[sid] = time.time()
-        try:
-            subprocess.Popen([sys.executable, OPEN_WINDOW, "session", sid], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-        except OSError: pass
 
 def resolve_transcript(q):
     """-> (items) pour une requête /api/transcript ; [] si rien de valide."""

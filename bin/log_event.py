@@ -4,9 +4,9 @@
 Avec `--source codex`, l'entrée est celle d'un hook Codex (même schéma que Claude Code) ; le hook sort toujours
 avec le code 0 et n'écrit jamais sur la sortie standard (Codex lirait ce texte comme une réponse du hook).
 """
-import json, re, subprocess, sys, time, os
+import json, re, sys, time, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import EV as LOG, short
+from common import EV as LOG, short, task_key
 MAX_LOG = 50 * 1024 * 1024  # au-delà, le journal passe dans events.1.jsonl
 CODEX_MODE = "--source" in sys.argv and sys.argv[sys.argv.index("--source") + 1:][:1] == ["codex"]
 try:
@@ -77,7 +77,7 @@ def codex_event(d):
     if not path and not sub:
         tp = d.get("transcript_path"); path = tp if isinstance(tp, str) else ""
     return {
-        "ts": time.time(), "event": event, "session": sid[:8], "agent_id": aid,
+        "ts": time.time(), "event": event, "session": task_key(sid, "codex"), "agent_id": aid,
         "agent": f"codex · {atype or 'agent'}" if sub else "codex",
         "tool": tool, "detail": short(detail, 600 if event in ("Stop", "SubagentStop", "Notification") else 220),
         "kind": kind, "cwd": d.get("cwd") if isinstance(d.get("cwd"), str) else "", "transcript": path,
@@ -99,9 +99,6 @@ if CODEX_MODE:
         ev = codex_event(d) if isinstance(d, dict) else None
         if ev:
             append(ev)
-            if ev["tool"] == "spawn_agent" and ev["event"] == "PreToolUse" and not os.environ.get("AGENTS_HUB_NO_WINDOW") and ev["session"].isalnum():
-                subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "open_window.py"), "session", ev["session"]],
-                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except BaseException:
         pass
     sys.exit(0)

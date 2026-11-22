@@ -1,9 +1,9 @@
 #!/bin/sh
 # Agents Hub : ouvre la fenêtre du tableau de bord (démarre le serveur au besoin).
-#   hub [--auto]     ouvre la fenêtre (elle suit la tâche active) sauf si une fenêtre non épinglée est déjà ouverte
+#   hub              (/hub) ouvre la fenêtre de la tâche en cours (CLAUDE_CODE_SESSION_ID, sinon CODEX_THREAD_ID, sinon --auto)
+#   hub --auto       ouvre la fenêtre (elle suit la tâche active) sauf si une fenêtre non épinglée est déjà ouverte
 #   hub session ID   ouvre une fenêtre épinglée sur la tâche ID, sauf si une fenêtre l'affiche déjà
-#   hub --hook       (hook Claude Code) lit session_id sur l'entrée standard, puis ouvre comme « session ID »
-#                    (ou comme --auto si l'identifiant est absent)
+# Jamais deux fenêtres pour la même tâche. Aucun hook n'ouvre de fenêtre.
 SELF="$0"
 while [ -h "$SELF" ]; do
   DIR=$(cd "$(dirname "$SELF")" && pwd)

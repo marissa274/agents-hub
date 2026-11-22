@@ -47,8 +47,9 @@ class InstallTest(unittest.TestCase):
         r = self.run_py("install"); self.assertEqual(r.returncode, 0, r.stderr)
         s = self.read_settings()
         self.assertEqual(set(s["hooks"]), {"PreToolUse", "SubagentStart", "SubagentStop", "UserPromptSubmit", "Stop", "Notification"})
-        self.assertEqual(len(self.commands(s)), 7)
-        self.assertTrue(any("open_window.py" in c and "--hook" in c for c in self.commands(s)))
+        self.assertEqual(len(self.commands(s)), 6)
+        self.assertFalse(any("open_window.py" in c for c in self.commands(s)))  # aucun hook n'ouvre de fenêtre
+        self.assertFalse(any(g.get("matcher") == "Agent|Task" for gs in s["hooks"].values() for g in gs))
         self.assertTrue(all(h["timeout"] == 5 for gs in s["hooks"].values() for g in gs for h in g["hooks"]))
         skill = read(os.path.join(self.claude, "skills", "hub", "SKILL.md"))
         self.assertNotIn("__AGENTS_HUB__", skill)
@@ -96,6 +97,27 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(s["hooks"]["Stop"][0], tiers["hooks"]["Stop"][0])
         self.assertEqual(len(s["hooks"]["Stop"]), 2)
 
+    def test_reinstall_removes_old_window_hook_keeps_third_party(self):
+        # installation d'une ancienne version : hook Agent|Task -> open_window.py --hook, enregistré dans le manifeste
+        self.assertEqual(self.run_py("install").returncode, 0)
+        win = f"python3 {self.root}/bin/open_window.py --hook >/dev/null 2>&1"
+        s = self.read_settings()
+        s["hooks"]["PreToolUse"].append({"matcher": "Agent|Task", "hooks": [{"type": "command", "command": win, "timeout": 5}]})
+        s["hooks"]["PreToolUse"].append({"matcher": "Bash", "hooks": [{"type": "command", "command": "echo tiers"}]})
+        self.write_settings(s)
+        mp = os.path.join(self.tmp, "data", "install-manifest.json")
+        man = json.loads(read(mp)); man["commands"] = sorted(man["commands"] + [win]); write(mp, json.dumps(man))
+        r = self.run_py("install"); self.assertEqual(r.returncode, 0, r.stderr)
+        cmds = self.commands()
+        self.assertNotIn(win, cmds)
+        self.assertIn("echo tiers", cmds)
+        self.assertEqual(len(cmds), 7)
+        self.assertNotIn(win, json.loads(read(mp))["commands"])
+        self.assertTrue(os.path.isdir(os.path.join(self.root, "backups")))
+        before = read(self.settings)
+        self.assertEqual(self.run_py("install").returncode, 0)
+        self.assertEqual(read(self.settings), before)  # idempotent
+
     def test_invalid_json_aborts(self):
         self.write_settings("{ pas du json")
         r = self.run_py("install")
@@ -140,7 +162,7 @@ class InstallTest(unittest.TestCase):
         r = self.run_py("install", "--force")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(other, self.commands())
-        self.assertEqual(len(self.commands()), 8)
+        self.assertEqual(len(self.commands()), 7)
 
     def test_root_change_replaces_old_commands(self):
         self.run_py("install")
@@ -148,7 +170,7 @@ class InstallTest(unittest.TestCase):
         shutil.copytree(self.root, root2, ignore=shutil.ignore_patterns("backups"))
         r = self.run_py("install", root=root2); self.assertEqual(r.returncode, 0, r.stderr)
         cmds = self.commands()
-        self.assertEqual(len(cmds), 7)
+        self.assertEqual(len(cmds), 6)
         self.assertTrue(all(root2 in c for c in cmds))
 
 
@@ -270,6 +292,18 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(read(self.hooks), first)
         self.assertEqual({p: read(p) for p in files}, files)
         self.assertFalse(os.path.exists(os.path.join(self.root, "backups")))
+
+    def test_codex_reinstall_same_place_wording(self):
+        self.with_codex()
+        self.run_py("install")
+        mp = os.path.join(self.tmp, "data", "install-manifest.json")
+        man = json.loads(read(mp)); man["codex_commands"] = man["codex_commands"] + ["python3 '/x/old.py' --source codex"]
+        write(mp, json.dumps(man), "w")
+        r = self.run_py("install"); self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Anciens hooks Codex", r.stdout)
+        self.assertIn("Hooks Codex obsolètes retirés : 0", r.stdout)  # rien dans hooks.json à retirer
+        self.assertNotIn("ajoutés dans " + self.hooks + " : 0", r.stdout)
+        self.assertNotIn("Hooks Codex ajoutés", r.stdout)
 
     def test_codex_conflict_refused_without_force(self):
         self.with_codex()

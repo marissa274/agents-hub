@@ -5,28 +5,18 @@
   score.py confirm C1-B2 | fixed C1-B2
   score.py total | list | reset
 """
-import argparse, glob, json, os, re, subprocess, sys, time
+import argparse, json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import SC as F, CODEX
+from common import SC as F, codex_root, task_key
 # chaque bug appartient au projet (racine git) d'où la commande est lancée : les projets ne se mélangent pas
 try: PROJ = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip() or os.getcwd()
 except Exception: PROJ = os.getcwd()
 # chaque bug appartient aussi à la tâche (session Claude Code ou Codex) qui l'a noté : la fenêtre d'une tâche ne montre que ses bugs
-def codex_root(tid):
-    """Tâche racine d'un fil Codex : session_id du rollout, sinon parent_thread_id, sinon le fil lui-même."""
-    try:
-        if re.match(r"^[0-9a-fA-F-]{8,64}$", tid):
-            hits = glob.glob(os.path.join(glob.escape(CODEX), "sessions", "*", "*", "*", f"*-{tid}.jsonl"))
-            if hits:
-                with open(max(hits, key=os.path.getmtime)) as f: meta = json.loads(f.readline()).get("payload") or {}
-                return str(meta.get("session_id") or meta.get("parent_thread_id") or tid)
-    except Exception: pass
-    return tid
 RAW = os.environ.get("AGENTS_HUB_SESSION") or os.environ.get("CLAUDE_CODE_SESSION_ID") or ""
-THREAD = ""
+THREAD, SRC = "", "claude"
 if not RAW and os.environ.get("CODEX_THREAD_ID"):
-    THREAD = os.environ["CODEX_THREAD_ID"]; RAW = codex_root(THREAD)
-SID = "".join(c for c in RAW if c.isalnum())[:8]
+    THREAD = os.environ["CODEX_THREAD_ID"]; RAW = codex_root(THREAD); SRC = "codex"
+SID = task_key(RAW, SRC)
 def ours(b): return b.get("session") == SID if SID else b.get("project") == PROJ
 PTS = {"critique": 10, "majeur": 5, "mineur": 2, "style": 1}
 def load():

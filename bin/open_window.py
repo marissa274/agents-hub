@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Ouvre une fenêtre du Hub par tâche, jamais deux pour la même.
 
+  open_window.py                     sans argument (/hub) : la tâche en cours = « session <id> » d'après
+                                     CLAUDE_CODE_SESSION_ID, sinon CODEX_THREAD_ID (tâche racine), sinon auto
   open_window.py [auto|--auto]       ouvre la fenêtre seulement si aucune fenêtre non épinglée n'est ouverte
                                      (elle suit la tâche active ; les fenêtres épinglées ne comptent pas)
   open_window.py session <id>        ouvre une fenêtre épinglée sur la tâche <id>, sauf si une fenêtre l'affiche déjà
-  open_window.py --hook              pour un hook Claude Code : lit session_id sur l'entrée standard, puis
-                                     se détache et lance « session <id> » (ou auto sans identifiant)
+  open_window.py --hook              ancien hook Claude Code (anciennes installations) : ne fait plus rien
+
+Aucun hook n'ouvre de fenêtre : elle s'ouvre seulement via /hub (ou le skill hub).
 
 Le serveur est démarré au besoin ; il compte les fenêtres ouvertes, les non épinglées et les tâches affichées
 (GET /api/windows). Ce processus détaché peut attendre quelques secondes (garde globale, fenêtre en cours
@@ -17,7 +20,7 @@ try:
     import fcntl
 except ImportError:
     sys.exit("Agents Hub : Windows non supporté (fcntl indisponible).")
-from common import ROOT, LOCK, LAST, ERR, PORT, URL
+from common import ROOT, LOCK, LAST, ERR, PORT, URL, codex_root, task_key
 
 GRACE = 20       # secondes : une fenêtre qui vient d'être ouverte met un moment à se signaler (par tâche)
 GLOBAL_GUARD = 3 # secondes : garde courte entre deux ouvertures, toutes tâches confondues
@@ -118,25 +121,6 @@ def launch(url):
     return "webbrowser"
 
 
-def detach(rest):
-    """Relance ce script avec rest dans un processus séparé : le hook (timeout 5 s) répond aussitôt."""
-    try:
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), *rest], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    except OSError:
-        return False
-    return True
-
-
-def hook_session():
-    """session_id lu dans le JSON de l'entrée standard ("" si absent ou illisible)."""
-    try:
-        d = json.loads(sys.stdin.read() or "{}")
-        return clean_sid(d.get("session_id")) if isinstance(d, dict) else ""
-    except Exception:
-        return ""
-
-
 def load_last():
     try:
         with open(LAST) as f: last = json.load(f)
@@ -145,12 +129,19 @@ def load_last():
         return {}
 
 
+def current_task():
+    """Tâche en cours d'après l'environnement : session Claude Code, sinon tâche racine du fil Codex, sinon "" (auto)."""
+    sid = task_key(os.environ.get("CLAUDE_CODE_SESSION_ID"))
+    if not sid and os.environ.get("CODEX_THREAD_ID"):
+        sid = task_key(codex_root(os.environ["CODEX_THREAD_ID"]), "codex")
+    return sid
+
+
 def main(argv):
-    if "--hook" in argv:
-        sid = hook_session()
-        if detach(["session", sid] if sid else ["auto"]): return 0
-        argv = ["session", sid] if sid else ["auto"]
-    sid = clean_sid(argv[1]) if len(argv) > 1 and argv[0] == "session" else ""
+    if "--hook" in argv: return 0  # compat : les anciens hooks n'ouvrent plus rien
+    if argv and argv[0] in ("auto", "--auto"): sid = ""
+    elif len(argv) > 1 and argv[0] == "session": sid = clean_sid(argv[1])
+    else: sid = current_task()
     key = sid or "*"
     with open(LOCK, "w") as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)  # les appels simultanés passent l'un après l'autre
@@ -181,7 +172,10 @@ def main(argv):
         def ts(k):
             v = last.get(k, 0)
             return v if isinstance(v, (int, float)) else 0
-        if not should_open(n if sid else unpinned, up, ts(key), now, sid, views, ts("_any")): return 0
+        if not should_open(n if sid else unpinned, up, ts(key), now, sid, views, ts("_any")):
+            if (views.get(sid, 0) if sid else unpinned) > 0: print("Agents Hub est déjà ouvert pour cette tâche.")
+            else: print("Agents Hub est en train de s'ouvrir… si rien n'apparaît, réessaie dans quelques secondes.")
+            return 0
         last = {k: v for k, v in last.items() if isinstance(v, (int, float)) and (k == "_n" or now - v < 600)}
         last[key] = last["_any"] = now
         last["_n"] = n  # fenêtres connectées avant cette ouverture : sert à repérer quand la nouvelle se déclare

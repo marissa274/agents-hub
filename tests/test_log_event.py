@@ -1,4 +1,5 @@
-import json, os, shutil, subprocess, sys, tempfile, unittest
+import json, os, runpy, shutil, subprocess, sys, tempfile, unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 SID = "019fcab7-7be9-73c1-a013-165682ee3abb"
@@ -32,7 +33,7 @@ class LogEventTest(unittest.TestCase):
     def test_bash(self):
         e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls -la"}})
         self.assertEqual((e["event"], e["tool"], e["detail"], e["agent"], e["agent_id"]), ("PreToolUse", "Bash", "ls -la", "codex", ""))
-        self.assertEqual((e["session"], e["source"], e["via"], e["cwd"], e["transcript"]), (SID[:8], "codex", "hook", "/w", "/t/r.jsonl"))
+        self.assertEqual((e["session"], e["source"], e["via"], e["cwd"], e["transcript"]), (SID[-8:].replace("-", ""), "codex", "hook", "/w", "/t/r.jsonl"))
 
     def test_apply_patch_multi_files(self):
         patch = "*** Begin Patch\n*** Add File: a/new.py\n+x\n*** Update File: b.py\n@@\n-x\n+y\n*** Delete File: c.txt\n*** End Patch\n"
@@ -113,6 +114,23 @@ class LogEventTest(unittest.TestCase):
         e = self.codex({"hook_event_name": "PreToolUse", "tool_name": "spawn_agent", "tool_input": {"agent_type": "a", "message": "m"}})
         self.assertEqual(e["tool"], "spawn_agent")
         self.assertFalse(os.path.exists(os.path.join(self.data, ".open.lock")))
+
+    def test_spawn_agent_never_opens_a_window_even_without_no_window(self):
+        # sans AGENTS_HUB_NO_WINDOW : le hook n'appelle ni Popen ni open_window (exécuté en processus, subprocess mocké)
+        env = {k: v for k, v in self.env.items() if k != "AGENTS_HUB_NO_WINDOW"}
+        payload = {"hook_event_name": "PreToolUse", "session_id": SID, "tool_name": "spawn_agent",
+                   "tool_input": {"agent_type": "a", "message": "m"}}
+        popen = mock.Mock(side_effect=AssertionError("Popen interdit"))
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "argv", ["log_event.py", "--source", "codex"]), \
+             mock.patch.object(sys, "stdin", __import__("io").StringIO(json.dumps(payload))), \
+             mock.patch("subprocess.Popen", popen), mock.patch("subprocess.run", popen), \
+             mock.patch("common.EV", os.path.join(self.data, "events.jsonl")):
+            os.makedirs(self.data, exist_ok=True)
+            with self.assertRaises(SystemExit) as cm: runpy.run_path(os.path.join(REPO, "bin", "log_event.py"), run_name="__main__")
+        self.assertEqual(cm.exception.code, 0)
+        popen.assert_not_called()
+        self.assertEqual(self.events()[-1]["tool"], "spawn_agent")  # l'activité est bien enregistrée
+        with open(os.path.join(REPO, "bin", "log_event.py")) as f: self.assertNotIn("open_window", f.read())
 
 
 if __name__ == "__main__":

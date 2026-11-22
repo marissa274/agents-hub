@@ -1,4 +1,6 @@
 import http.client, json, os, shutil, socket, subprocess, sys, tempfile, time, unittest
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin"))
+from common import task_key
 
 REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -101,24 +103,24 @@ class ServerTest(unittest.TestCase):
 
     def test_hooked_session_not_duplicated_by_adapter(self):
         time.sleep(1.2)  # l'adaptateur a pris son état initial
-        hooked, free = "aaaa0001-0000-0000-0000-000000000000", "bbbb0002-0000-0000-0000-000000000000"
+        hooked, free = "019fcab7-7be9-73c1-a013-0000aaaa0001", "019fcab7-7bea-73c1-a013-0000bbbb0002"
         with open(os.path.join(self.data, "events.jsonl"), "a") as f:
-            f.write(json.dumps({"ts": time.time(), "event": "PreToolUse", "session": hooked[:8], "agent": "codex", "tool": "Bash",
+            f.write(json.dumps({"ts": time.time(), "event": "PreToolUse", "session": task_key(hooked, "codex"), "agent": "codex", "tool": "Bash",
                                 "source": "codex", "via": "hook", "cwd": "/w"}) + "\n")
         self.rollout("hooked-cmd", hooked); self.rollout("free-cmd", free)
         for _ in range(60):
-            if any(e.get("session") == free[:8] for e in self.events()): break
+            if any(e.get("session") == task_key(free, "codex") for e in self.events()): break
             time.sleep(0.2)
         ev = self.events()
-        self.assertTrue([e for e in ev if e.get("session") == free[:8] and e.get("via") != "hook"], "repli adaptateur : session sans hook émise")
-        self.assertEqual([e for e in ev if e.get("session") == hooked[:8] and e.get("via") != "hook"], [], "doublon de la session sous hooks")
-        self.assertEqual(len([e for e in ev if e.get("session") == hooked[:8]]), 1)
+        self.assertTrue([e for e in ev if e.get("session") == task_key(free, "codex") and e.get("via") != "hook"], "repli adaptateur : session sans hook émise")
+        self.assertEqual([e for e in ev if e.get("session") == task_key(hooked, "codex") and e.get("via") != "hook"], [], "doublon de la session sous hooks")
+        self.assertEqual(len([e for e in ev if e.get("session") == task_key(hooked, "codex")]), 1)
 
     def test_titles_from_codex_session_index(self):
         os.makedirs(self.codex, exist_ok=True)
         write(os.path.join(self.codex, "session_index.jsonl"),
-              json.dumps({"id": "cccc0003-1", "thread_name": "Premier"}) + "\n" + json.dumps({"id": "cccc0003-1", "thread_name": "Titre Codex"}) + "\n"
-              + json.dumps({"id": "dddd0004-1", "thread_name": "Guardian review x"}) + "\n")
+              json.dumps({"id": "019fcab7-7be9-73c1-a013-0000cccc0003", "thread_name": "Premier"}) + "\n" + json.dumps({"id": "019fcab7-7be9-73c1-a013-0000cccc0003", "thread_name": "Titre Codex"}) + "\n"
+              + json.dumps({"id": "019fcab7-7bea-73c1-a013-0000dddd0004", "thread_name": "Guardian review x"}) + "\n")
         self.assertEqual(self.title("cccc0003"), "Titre Codex")
         self.assertIsNone(self.title("dddd0004"))
 
@@ -278,6 +280,21 @@ class ServerTest(unittest.TestCase):
         html = read(os.path.join(REPO, "ui", "index.html"))
         self.assertNotIn('class="sev ${b.severity}"', html)
         self.assertIn("SEVS.includes(b.severity)", html)
+
+
+class EmitNoWindowTest(unittest.TestCase):
+    def test_emit_writes_events_but_never_opens_a_window(self):
+        tmp = tempfile.mkdtemp(prefix="hub-emit-"); self.addCleanup(shutil.rmtree, tmp, True)
+        env = {"PATH": "/usr/bin:/bin", "HOME": tmp, "AGENTS_HUB_DATA": os.path.join(tmp, "data"), "AGENTS_HUB_PORT": "1"}  # sans AGENTS_HUB_NO_WINDOW
+        code = ("import subprocess, sys; sys.path.insert(0, %r)\n"
+                "def boom(*a, **k): raise AssertionError('Popen interdit')\n"
+                "subprocess.Popen = boom\n"
+                "import server\n"
+                "server.emit([{'ts': 1, 'event': 'PreToolUse', 'session': 'abcd1234', 'source': 'codex', 'via': 'rollout', 'tool': 'spawn_agent'}])\n"
+                "print(open(server.EV).read().count('abcd1234'))\n") % os.path.join(REPO, "bin")
+        r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "1"), r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(tmp, "data", ".open.lock")))
 
 
 if __name__ == "__main__":
