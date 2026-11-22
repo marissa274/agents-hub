@@ -16,7 +16,7 @@ Je n'arrivais pas à voir mes agents travailler, alors j'ai créé Agents Hub : 
 - Fonctionne avec Claude Code et Codex.
 - Une fenêtre par tâche (Claude Code ou Codex), jamais deux pour la même tâche ; `bin/hub` sans argument ouvre une fenêtre qui suit la tâche en cours.
 - Le titre de la tâche (« Projet · Titre ») s'affiche en haut de la page, repris de Claude Code ou, à défaut, du premier prompt.
-- Trois thèmes : Rose, Clair, Sombre.
+- Trois thèmes : Sombre (par défaut), Rose (rose sur fond noir) et Clair.
 - Un scoreboard pour le reviewer : bugs trouvés, confirmés ou rejetés, sur 3 cycles de revue.
 
 ## L'équipe de départ
@@ -33,6 +33,25 @@ Il est aussi livré avec 6 agents de base, optionnels, qui servent quand tu n'as
 - `reviewer` : chasse les bugs et marque des points.
 
 L'installation ne remplace jamais un agent que tu as déjà.
+
+## Ajouter tes propres agents
+
+Un agent, c'est un simple fichier texte. Agents Hub l'affiche automatiquement :
+
+- **Pour un seul projet** : crée `.claude/agents/mon-agent.md` à la racine du projet (Codex : `.codex/agents/mon-agent.toml`).
+- **Pour tous tes projets** : crée `~/.claude/agents/mon-agent.md` (Codex : `~/.codex/agents/mon-agent.toml`).
+
+Exemple minimal pour Claude Code :
+
+```markdown
+---
+name: testeur
+description: Écrit et lance les tests du projet.
+---
+Tu écris des tests clairs pour chaque fonctionnalité, puis tu les lances.
+```
+
+Redémarre Claude Code pour qu'il voie le nouvel agent. Dans le hub, les agents d'un projet portent le nom du projet en badge.
 
 ## Installation
 
