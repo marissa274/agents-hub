@@ -295,7 +295,8 @@ function sessions(){
   }
   return Object.values(m).sort((a,b)=>b.last-a.last);
 }
-function taskTitle(s){ return (titles[s.id]||s.prompt||"").replace(/\s+/g," ").trim(); }
+/* titre de la tâche ; un lien Markdown du premier message (« [$hub](/…/SKILL.md) ») est réduit à son texte (« $hub ») */
+function taskTitle(s){ return (titles[s.id]||s.prompt||"").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/\s+/g," ").trim(); }
 function currentSession(list){ return selected==="auto"?(list.find(s=>!pinnedElsewhere.has(s.id))||list[0]):list.find(s=>s.id===selected)||list[0]; }
 
 /* ---------- état dérivé du travail sélectionné ---------- */
