@@ -138,9 +138,9 @@ La seule chose interdite : revendre Agents Hub lui-même.
 
 [MIT + Commons Clause](LICENSE) :
 
-- ✅ **Permis** : utiliser Agents Hub gratuitement, **y compris dans un cadre professionnel** (en entreprise, pour tes clients, pour tes projets payants), le copier, le modifier et partager tes versions.
+- ✅ **Permis** : utiliser Agents Hub gratuitement, pour **apprendre ou enseigner** (cours, ateliers, écoles), pour tes projets perso **et dans un cadre professionnel** (en entreprise, pour tes clients, pour tes projets payants) ; le copier, le modifier et partager tes versions.
 - ❌ **Interdit** : **revendre Agents Hub lui-même**, c'est-à-dire le vendre, le proposer comme service payant (hébergement, abonnement) ou vendre un produit ou un support dont la valeur vient surtout d'Agents Hub.
 
-Garde toujours le fichier `LICENSE` (avec mon nom) dans tes copies et tes versions modifiées. Pour toute question, contacte-moi sur [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
+Garde toujours le fichier `LICENSE` (avec mon nom) dans tes copies et tes versions modifiées : c'est la seule condition de la MIT, et c'est lui qui transmet la règle « pas de revente » à chaque personne qui reçoit une copie. Pour toute question, contacte-moi sur [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
 
 Créé par [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)

@@ -140,9 +140,9 @@ The only thing not allowed: reselling Agents Hub itself.
 
 [MIT + Commons Clause](LICENSE):
 
-- ✅ **Allowed**: using Agents Hub for free, **including professionally** (at your company, for your clients, in paid projects), copying it, modifying it and sharing your versions.
+- ✅ **Allowed**: using Agents Hub for free, to **learn or teach** (courses, workshops, schools), for personal projects **and professionally** (at your company, for your clients, in paid projects); copying it, modifying it and sharing your versions.
 - ❌ **Not allowed**: **reselling Agents Hub itself**, i.e. selling it, offering it as a paid service (hosting, subscription) or selling a product or support whose value comes mainly from Agents Hub.
 
-Always keep the `LICENSE` file (with my name) in your copies and modified versions. For any question, contact me on [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
+Always keep the `LICENSE` file (with my name) in your copies and modified versions: it is the only condition of the MIT license, and it is what passes the "no resale" rule on to everyone who receives a copy. For any question, contact me on [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
 
 Made by [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)
