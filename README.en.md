@@ -124,6 +124,18 @@ Removes the installed hooks, agents and skill (a file you modified is kept). You
 
 Contributions are welcome. To add another tool (Cursor, Gemini…), copy `bin/adapters/codex.py`, adapt it, then add it to `bin/adapters/__init__.py`. Run the tests with `python3 -m unittest discover tests`.
 
+## Our philosophy
+
+Agents Hub is a community project: free, with its source code available.
+
+Our goal is simple: make development tools accessible to as many people as possible, encourage learning and foster collaboration.
+
+Everyone is welcome to use, study, improve and share Agents Hub, within the terms of its noncommercial license.
+
+Agents Hub is not meant to become a commercial product. Its development relies on sharing knowledge, helping each other and contributions from the community.
+
+Commercial use is not permitted under the current license.
+
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE): you may use, copy, modify and share Agents Hub **for free, for noncommercial purposes** (personal use, study, research, nonprofits…).
