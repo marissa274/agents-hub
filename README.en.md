@@ -130,16 +130,19 @@ Agents Hub is a community project: free, with its source code available.
 
 Our goal is simple: make development tools accessible to as many people as possible, encourage learning and foster collaboration.
 
-Everyone is welcome to use, study, improve and share Agents Hub, within the terms of its noncommercial license.
+Everyone is welcome to use, study, improve and share Agents Hub, including at work, within the terms of its license.
 
 Agents Hub is not meant to become a commercial product. Its development relies on sharing knowledge, helping each other and contributions from the community.
 
-Commercial use is not permitted under the current license.
+The only thing not allowed: reselling Agents Hub itself.
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE): you may use, copy, modify and share Agents Hub **for free, for noncommercial purposes** (personal use, study, research, nonprofits…).
+[MIT + Commons Clause](LICENSE):
 
-**Selling Agents Hub, or using it in a paid product or service, requires my permission.** For a commercial license, contact me on [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
+- ✅ **Allowed**: using Agents Hub for free, **including professionally** (at your company, for your clients, in paid projects), copying it, modifying it and sharing your versions.
+- ❌ **Not allowed**: **reselling Agents Hub itself**, i.e. selling it, offering it as a paid service (hosting, subscription) or selling a product or support whose value comes mainly from Agents Hub.
+
+Always keep the `LICENSE` file (with my name) in your copies and modified versions. For any question, contact me on [LinkedIn](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/).
 
 Made by [Marissabelle Bindeki](https://www.linkedin.com/in/marissa-belle-bindeki-b32090333/)
